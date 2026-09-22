@@ -450,6 +450,7 @@ html,body,button,input,textarea,select,h1,h2,h3,.theme{font-family:Meiryo,'ãƒ¡ã‚
   </dialog>
 
   <div id="toast" class="toast" role="status"></div>
+  <script>try{window.__todo2LocalBeforeBoot=localStorage.getItem('cian_confirmed_073538_revision_demo_v1');}catch{window.__todo2LocalBeforeBoot=null;}</script>
   <script>
 
 const STORAGE_KEY = "cian_confirmed_mock_unused_legacy";
@@ -1558,5 +1559,13 @@ document.head.insertAdjacentHTML('beforeend','<style>#dailyNotices[hidden]{displ
 refreshWork();
 
 </script>
+<script>
+let firebaseSyncApplying=false;const firebaseLocalPersist=persist;persist=function(){firebaseLocalPersist();if(!firebaseSyncApplying&&window.todo2SyncBridge)window.dispatchEvent(new CustomEvent('todo2:local-save',{detail:{state:window.todo2SyncBridge.read()}}));};
+window.todo2SyncBridge={read:()=>structuredClone(demo),replace:state=>{firebaseSyncApplying=true;demo=structuredClone(state);try{localStorage.setItem(MOCK_KEY,JSON.stringify(demo));}catch{}storyDrafts?.clear?.();refreshWork();firebaseSyncApplying=false;}};
+</script>
+<style>
+#firebaseLogin{position:fixed;inset:0;z-index:1000;background:#f5f4f0;padding:calc(32px + env(safe-area-inset-top)) 20px 30px;overflow:auto}#firebaseLogin form{max-width:420px;margin:auto;background:#fffef9;border:1px solid #d6dccb;border-radius:16px;padding:24px}#firebaseLogin label{display:block;margin:16px 0}#firebaseLogin input{display:block;width:100%;margin-top:6px}#firebaseLoginError,.sync-error{color:#9c2e29}#firebaseSyncBar{position:fixed;z-index:25;right:8px;top:8px;display:flex;align-items:center;gap:7px;max-width:calc(100% - 16px);padding:5px 8px;background:rgba(255,253,249,.95);border:1px solid #d6dccb;border-radius:9px;font-size:10px}#firebaseSyncBar button{min-height:28px;padding:3px 7px;font-size:10px}.firebase-locked>.app-shell{visibility:hidden}
+</style>
+<script type="module" src="./firebase-sync.js"></script>
 </body>
 </html>
