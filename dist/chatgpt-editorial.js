@@ -86,5 +86,30 @@ const originalPrompt=prompt;
 prompt=function(scope){return originalPrompt(scope).replace('返答は説明文を付けずJSONだけにしてください。', `本文は300文字以上。文字数の水増しではなく、cian en paclamの元タンナー・作り手として確認できる素材、仕上げ、工程、構造、実際の使用場面を具体的に扱ってください。一般論だけにせず、疑問→実物で確かめる知識→暮らしでの使い道を投稿ごとに自然につないでください。未確認の経験や商品性能は創作しません。保存記録に根拠がないアンケート結果・質問回答・お客様の声は事実として書かず、記録があっても意味を変えません。顧客反応は判断材料であり毎日強制採用しません。\n\nStory1はメインの要約ではなく別の知識。Story2は自由回答なら質問スタンプ、2〜4択ならアンケートかクイズを選び、直近と同じ質問を避けます。Story3はStory1と別の被写体・学びを示し、商品が主役なら商品紹介、例示だけなら非商品として扱います。Story4はStory3の言い換えや単なる「投稿を見て」ではなく、今日のメイン投稿で具体的に何を確かめられるかを示します。撮影指示は各カットに何を・どう撮る・何を伝えるを含め、Feedは写真、Reelは動画に合わせます。完成後に本文・Story1〜4・撮影を再読し、同じ行動・学び・被写体、根拠のない声、回答形式や商品分類の不一致を解消してください。\n\n返答は説明文を付けずJSONだけにしてください。`);};
 const originalSinglePrompt=singlePrompt;
 singlePrompt=function(post){return originalSinglePrompt(post).replace('返答は説明なしの1日分JSONだけ：', `本文は300文字以上で、その日固有の素材・仕上げ・工程・構造・使う場面を具体的に扱い、一般論の水増しにしないでください。保存された記録に根拠のないアンケート結果・お客様の声を創作しないでください。Story1〜4は同じ行動・学び・被写体を繰り返さず、Story2の選択肢と回答方法、Story3の商品分類、Story4の投稿を見る具体的理由を確認してください。Feedは写真、Reelは動画に合う撮影案を考えてください。\n\n返答は説明なしの1日分JSONだけ：`);};
-window.editorialPlanner={context,prompt,extract,validate,warnings,singleContext,singlePrompt,validateSingle,periodReview};refreshWork();
+function nextEditorialContext(){
+ const block=salesCycleBlock();if(!block)throw Error('次の期間を計算できません。販売日を確認してください。');
+ const from=block.nextFrom,to=block.nextTo,data=context('ten-day'),history=postHistories(from,to);
+ data.period={from,to,days:Array.from({length:dayDiff(to,from)+1},(_,i)=>{const date=dayAdd(from,i);return {date,dayNumber:block.nextDayFrom+i,blocked:blocked(date)};})};
+ data.actualHistory={count:history.actualHistory.length,posts:history.actualHistory};
+ data.plannedPosts={count:history.plannedPosts.length,posts:history.plannedPosts};
+ data.productExposure=exposureSummary(history.actualHistory);
+ data.monthly.saleStrategy=monthlySaleStrategy(from,to);
+ data.balance.existing=demo.posts.filter(p=>!p.deleted&&p.date>=from&&p.date<=to).reduce((counts,p)=>(counts[p.primaryAxis]=(counts[p.primaryAxis]||0)+1,counts),{});
+ return data;
+}
+function nextEditorialPrompt(){
+ const data=nextEditorialContext(),base=prompt('ten-day'),marker='\n\n編集コンテキスト：\n',split=base.lastIndexOf(marker);
+ if(split<0)throw Error('編集コンテキストを作成できません。');
+ const first=data.period.days.find(day=>!day.blocked)?.dayNumber||data.period.days[0]?.dayNumber||1;
+ const intro=base.slice(0,split).replace(/実投稿履歴：\d+件/,`実投稿履歴：${data.actualHistory.count}件`).replace(/予定投稿：\d+件/,`予定投稿：${data.plannedPosts.count}件`).replace(/"dayNumber":\d+/,`"dayNumber":${first}`);
+ return intro+marker+JSON.stringify(data,null,2);
+}
+const planWithNextEditorial=renderPlan;
+renderPlan=function(){
+ planWithNextEditorial();
+ const next=dx('#planPeriodCard .next-plan-period');if(!next)return;
+ next.insertAdjacentHTML('beforeend','<button type="button" class="secondary full" id="copyNextTenEditorial">次の10日を準備｜ChatGPT用にコピー</button>');
+ dx('#copyNextTenEditorial').onclick=()=>{try{navigator.clipboard.writeText(nextEditorialPrompt()).then(()=>toast('次の期間の編集コンテキストをコピーしました')).catch(()=>toast('コピーできませんでした。ブラウザの権限を確認してください。'));}catch(error){toast(error.message);}};
+};
+window.editorialPlanner={context,prompt,nextContext:nextEditorialContext,nextPrompt:nextEditorialPrompt,extract,validate,warnings,singleContext,singlePrompt,validateSingle,periodReview};refreshWork();
 })();
