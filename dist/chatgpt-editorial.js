@@ -18,5 +18,65 @@ function applyPreview(){for(const x of preview.data.plans){const old=demo.posts.
 function copyText(scope){navigator.clipboard.writeText(prompt(scope)).then(()=>toast((scope==='month'?'月間':'10日')+'編集コンテキストをコピーしました'));}
 const oldPlan=renderPlan;renderPlan=function(){oldPlan();const box=dx('#planPeriodCard .actions');if(box){box.innerHTML='<button class="secondary" id="copyTenEditorial">ChatGPT用10日企画をコピー</button><button class="ghost" id="importTenEditorial">JSONを貼り付ける</button>';dx('#copyTenEditorial').onclick=()=>copyText('ten-day');dx('#importTenEditorial').onclick=openImport;}};
 const oldMonth=renderMonthWork;renderMonthWork=function(){oldMonth();const head=dx('#view-month > .row');if(head&&!dx('#copyMonthEditorial'))head.insertAdjacentHTML('afterend','<article class="card"><h3>月間編集計画</h3><p>販売・商品・履歴・反応をまとめてChatGPTへ渡します。</p><button class="secondary full" id="copyMonthEditorial">ChatGPT用月間コンテキストをコピー</button></article>');dx('#copyMonthEditorial')?.addEventListener('click',()=>copyText('month'),{once:true});};
-window.editorialPlanner={context,prompt,extract,validate,warnings};refreshWork();
+const SINGLE_SCOPE='single-day-reproposal';
+const protectedPost=p=>!!(p?.manual||p?.actualAt||p?.actualSnapshot||p?.deleted||p?.stories?.some(s=>s.manual));
+function savedPlan(p){const topic=OFFICIAL_TOPICS.find(t=>t.id===p.parentId);return {date:p.date,dayNumber:Number(cycleDay(p.date).replace(/\D/g,'')),format:p.format,primaryPurpose:p.primaryAxis,customerValue:p.takeaway||'',themeId:p.parentId||'',themeCategory:topic?.group||p.topicGroup||'',editorialSource:p.editorialSource||null,mainTopic:p.theme||'',angle:p.derivedTheme||'',products:[...(p.skuIds||[])],mainPostBody:p.caption||'',story1:p.stories?.[0]||{text:''},story2:p.stories?.[1]||{text:''},story3:p.stories?.[2]||{text:''},story4:p.stories?.[3]||{text:''},CTA:p.cta||''};}
+function periodReview(posts){
+ const plans=posts.map(savedPlan),notes=warnings(plans).map(w=>w.text),dates=rows=>rows.map(p=>short(p.date)).join('、');
+ const exposure=plans.map(p=>({plan:p,ids:[...new Set([...p.products,...[1,2,3,4].flatMap(n=>p['story'+n]?.skuIds||[])])]}));
+ const bySku={},byCategory={};
+ for(const row of exposure)for(const id of row.ids){
+  (bySku[id]||=[]).push(row.plan);
+  const product=sku(id),category=demo.categories.find(c=>c.id===item(product?.itemId)?.categoryId)?.name;
+  if(category)(byCategory[category]||=[]).push(row.plan);
+ }
+ for(const [id,rows] of Object.entries(bySku))if(rows.length>=4)notes.push(`同一SKU「${skuLabel(id)}」が${rows.length}日（対象日：${dates(rows)}）`);
+ for(const [category,rows] of Object.entries(byCategory)){const days=[...new Set(rows)];if(days.length>=4)notes.push(`商品カテゴリ「${category}」が${days.length}日（対象日：${dates(days)}）`);}
+ for(const [label,test] of [['mini wallet',id=>/mini wallet/i.test(skuLabel(id))],['黒系商品',id=>/black|noir|黒/i.test(skuLabel(id))],['財布カテゴリ',id=>/wallet|財布/i.test(skuLabel(id))]]){
+  const rows=exposure.filter(row=>row.ids.some(test)).map(row=>row.plan);
+  if(rows.length>=4)notes.push(`${label}が${rows.length}日（対象日：${dates(rows)}）`);
+ }
+ const ctas=plans.reduce((groups,p)=>{const key=String(p.CTA||'').trim().replace(/\s+/g,'');if(key)(groups[key]||=[]).push(p);return groups;},{});
+ for(const rows of Object.values(ctas))if(rows.length>=3)notes.push(`同じCTAが${rows.length}件（対象日：${dates(rows)}）`);
+ for(const p of posts){const local=[...storyCheck(p,p.stories||[]),...storyWarnings(p)];for(const note of new Set(local))notes.push(`${short(p.date)}：${note}`);}
+ return [...new Set(notes)];
+}
+function singleContext(p){const broad=context('ten-day'),currentWarnings=periodReview(rangePosts()),others=rangePosts().filter(other=>other.id!==p.id&&!other.deleted).map(savedPlan);return {schema:SCHEMA,scope:SINGLE_SCOPE,target:savedPlan(p),currentWarnings,targetWarnings:currentWarnings.filter(note=>note.includes(short(p.date))),otherDays:others,actualHistory:broad.actualHistory,productExposure:broad.productExposure,monthlySaleStrategy:broad.monthly.saleStrategy,officialTopics:broad.officialTopics,products:broad.products};}
+function singlePrompt(p){const data=singleContext(p);return `cian en paclamの10日企画のうち、対象日だけを修正してください。他の日は変更しないでください。対象日のメインテーマを維持するか変更するかは、警告と10日全体のバランスを見て判断し、変更不要ならthemeIdを維持してください。重複語句の言い換えだけで済ませず、問い・結論・見せ方・企画構造まで確認し、企画角度そのものを変えてください。他の日と似ない内容にしてください。Story1は知識・有益・楽しさ、Story2は参加・対話、Story3は商品・革・ものづくりの発見、Story4は今日のメイン投稿への導線です。Story2は顧客とのコミュニケーションとして設計してください。Story3を商品紹介欄に固定しないでください。Story4を投稿タイトルの言い換えだけにしないでください。商品を出さないStoryも、CTAなしの日も認めます。Feed / Reelのみを使い、INDUSTRY 66〜80は出典確認が必要です。顧客価値を明示し、既存の手動編集・投稿済みデータは変更しないでください。\n\n返答は説明なしの1日分JSONだけ：{"schema":"${SCHEMA}","scope":"${SINGLE_SCOPE}","plan":{"date":"${p.date}","dayNumber":${data.target.dayNumber},"format":"Reel","primaryPurpose":"CUSTOMER_VALUE","customerValue":"...","themeId":"official-01","themeCategory":"LEATHER","mainTopic":"...","angle":"...","products":[],"mainPostBody":"...","story1":{"text":"...","action":"..."},"story2":{"text":"...","action":"..."},"story3":{"text":"...","action":"..."},"story4":{"text":"...","action":"..."},"CTA":null}}\n\n再提案コンテキスト：\n${JSON.stringify(data,null,2)}`;}
+function validateSingle(data,date){if(data?.schema!==SCHEMA||data.scope!==SINGLE_SCOPE||!data.plan||Array.isArray(data.plan)||data.plans)throw Error('1日再提案用JSONのschema・scope・planを確認してください。');const p=data.plan,topic=OFFICIAL_TOPICS.find(t=>t.id===p.themeId);if(p.date!==date)throw Error('対象日以外の企画は取り込めません。');if(blocked(date))throw Error('投稿不可日は再提案を確定できません。');if(p.dayNumber!=null&&Number(p.dayNumber)!==Number(cycleDay(date).replace(/\D/g,'')))throw Error('Day表示が対象日と一致しません。');if(!topic||!validAxes.includes(p.primaryPurpose)||!['Feed','Reel'].includes(p.format))throw Error('正式テーマ・主目的・形式を確認してください。');if(p.themeCategory&&p.themeCategory!==topic.group)throw Error('正式テーマのカテゴリがthemeIdと一致しません。');if(!p.mainTopic?.trim()||!p.customerValue?.trim()||!p.mainPostBody?.trim()||![1,2,3,4].every(n=>p['story'+n]?.text?.trim()))throw Error('テーマ・顧客価値・本文・Story1〜4が不足しています。');if(!Array.isArray(p.products)||p.products.some(id=>!sku(id)||sku(id).deleted))throw Error('商品IDを商品管理と照合してください。');if([1,2,3,4].some(n=>p['story'+n].skuIds!==undefined&&(!Array.isArray(p['story'+n].skuIds)||p['story'+n].skuIds.some(id=>!sku(id)||sku(id).deleted))))throw Error('Storyの商品IDを商品管理と照合してください。');if(p.CTA!=null&&typeof p.CTA!=='string')throw Error('CTAは文章またはnullにしてください。');return topic;}
+function planComparison(p,before){
+ const topic=OFFICIAL_TOPICS.find(t=>t.id===p.themeId);
+ const changed=key=>before&&JSON.stringify(p[key]??'')!==JSON.stringify(before[key]??'');
+ const row=(label,value,keys)=>`<p class="${keys.some(changed)?'editorial-diff':''}"><strong>${label}</strong>${keys.some(changed)?'<span class="badge">変更</span>':''}<br>${value}</p>`;
+ return row('日付・Day・形式',`${html(p.date)} · Day${html(p.dayNumber)} · ${html(p.format)}`,['date','dayNumber','format'])+
+ row('正式テーマ',`${html(topic?.group||'')} #${html(topic?.number||'')} ${html(topic?.title||'未確認')}`,['themeId'])+
+ row('主目的',html(p.primaryPurpose),['primaryPurpose'])+
+ row('顧客価値',html(p.customerValue),['customerValue'])+
+ row('企画・切り口',`${html(p.mainTopic)}<br>${html(p.angle||'未指定')}`,['mainTopic','angle'])+
+ row('商品',html(p.products.map(skuLabel).join(' / ')||'商品なし'),['products'])+
+ row('本文',html(p.mainPostBody),['mainPostBody'])+
+ [1,2,3,4].map(n=>row('Story'+n,html(p['story'+n].text),['story'+n])).join('')+
+ row('CTA',html(p.CTA||'CTAなし'),['CTA']);
+}
+let singlePreview=null;
+function showSinglePreview(){const {postId,before,after,revision}=singlePreview,post=demo.posts.find(p=>p.id===postId),protectedNow=protectedPost(post);openForm('1日再提案｜変更前・変更後',`<p class="tiny muted">${html(short(after.date))}だけを差し替えます。他の日は変更しません。</p>${protectedNow?'<p class="notice">この投稿は保護されています。ChatGPT案を見ることはできますが、自動確定できません。</p>':''}<details class="card"><summary>変更前｜保存済み</summary>${planComparison(before)}</details><details class="card" open><summary>変更後｜ChatGPT案</summary>${planComparison(after,before)}</details><p class="tiny muted">確定後に10日全体の重複・偏りを再確認します。</p>`,()=>{const current=demo.posts.find(p=>p.id===postId);if(!current||current.date!==after.date||protectedPost(current))throw Error('この投稿は保護されています。自動確定できません。');if(current.revision!==revision)throw Error('プレビュー中に投稿が更新されました。開き直して確認してください。');const topic=validateSingle({schema:SCHEMA,scope:SINGLE_SCOPE,plan:after},current.date);Object.assign(current,{format:after.format,primaryAxis:after.primaryPurpose,parentId:topic.id,topicGroup:topic.group,theme:after.mainTopic,derivedTheme:after.angle||after.mainTopic,takeaway:after.customerValue,caption:after.mainPostBody,cta:after.CTA||'',skuIds:[...after.products],subjects:'',stories:[1,2,3,4].map((n,i)=>({...after['story'+n],slot:n,purpose:STORY_ROLES[i],skuIds:after['story'+n].skuIds||[],storySpecVersion:4})),researchRequired:!!topic.researchRequired,revision:(current.revision||0)+1,editorialSource:'chatgpt-import'});persist();refreshWork();singlePreview=null;const notes=periodReview(rangePosts());dx('#workDialog').close();openForm('10日全体の再チェック',notes.length?`<p class="notice">要確認 ${notes.length}件</p><div class="card">${notes.map(note=>`<p class="tiny">${html(note)}</p>`).join('')}</div>`:'<p>10日全体の重複・偏り警告はありません。</p>',()=>false);dx('#workForm .save-foot button').textContent='確認しました';dx('#workForm .save-foot button').type='button';dx('#workForm .save-foot button').onclick=()=>dx('#workDialog').close();return false;});const save=dx('#workForm .save-foot button');save.textContent=protectedNow?'保護中・自動確定できません':'この日だけ確定する';if(protectedNow)save.disabled=true;}
+function openSingleImport(id){const post=demo.posts.find(p=>p.id===id&&!p.deleted);if(!post)return;openForm('1日分のChatGPT案を貼り付ける',`<p>${html(short(post.date))}の1日分JSONを貼り付けてください。確定前に変更前／変更後を表示します。</p>${protectedPost(post)?'<p class="notice">この投稿は保護されています。案は確認できますが、自動確定できません。</p>':''}<label class="wlabel">1日分JSON<textarea name="singleJson" rows="12" required></textarea></label>`,f=>{const data=extract(f.get('singleJson'));validateSingle(data,post.date);singlePreview={postId:post.id,before:savedPlan(post),after:data.plan,revision:post.revision};showSinglePreview();return false;});dx('#workForm .save-foot button').textContent='変更前／変更後を見る';}
+function openSingle(id){const post=demo.posts.find(p=>p.id===id&&!p.deleted);if(!post)return;dx('#dayDialog').close();openForm('ChatGPTでこの日を再提案',`<p><strong>${html(planDay(post.date))}</strong></p>${protectedPost(post)?'<p class="notice">この投稿は保護されています。ChatGPT案を見ることはできますが、自動確定できません。</p>':''}<p>現在の警告と10日全体、実投稿・商品履歴を一緒にコピーします。</p><button type="button" class="secondary full" id="copySingleEditorial">再提案用プロンプトをコピー</button><button type="button" class="ghost full" id="pasteSingleEditorial">1日分JSONを貼り付ける</button>`,()=>false);dx('#workForm .save-foot').hidden=true;dx('#copySingleEditorial').onclick=()=>navigator.clipboard.writeText(singlePrompt(post)).then(()=>toast('1日再提案用プロンプトをコピーしました'));dx('#pasteSingleEditorial').onclick=()=>openSingleImport(post.id);}
+const editorialShowPost=showPost;showPost=function(id){
+ editorialShowPost(id);
+ const post=demo.posts.find(p=>p.id===id);
+ if(!post||!['Feed','Reel'].includes(post.format)||!rangePosts().some(p=>p.id===id))return;
+ const concept=dx('#dayDetail .concept-detail'),section=dx('#dayDetail .stories-always');
+ if(!concept||!section)return;
+ concept.insertAdjacentHTML('afterend','<button type="button" class="secondary full" id="singleDayEditorial">ChatGPTでこの日を再提案</button>');
+ dx('#singleDayEditorial').onclick=()=>openSingle(id);
+ const warning=[...section.querySelectorAll('details')].find(el=>el.querySelector('summary')?.textContent.startsWith('4枠の重複チェック'));
+ if(warning&&/\d+件/.test(warning.querySelector('summary')?.textContent||'')){
+  warning.open=true;
+  warning.insertAdjacentHTML('beforeend','<button type="button" class="secondary full" id="singleDayWarningEditorial">ChatGPTで再提案</button>');
+  dx('#singleDayWarningEditorial').onclick=()=>openSingle(id);
+ }
+};
+document.head.insertAdjacentHTML('beforeend','<style>.editorial-diff{border-left:3px solid #53695f;background:#f0f2ef;padding:8px 10px;border-radius:6px;white-space:pre-wrap;overflow-wrap:anywhere}.editorial-diff .badge{margin-left:8px}#singleDayEditorial{margin:8px 0 16px}#singleDayWarningEditorial{margin-top:8px}</style>');
+window.editorialPlanner={context,prompt,extract,validate,warnings,singleContext,singlePrompt,validateSingle,periodReview};refreshWork();
 })();
