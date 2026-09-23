@@ -14,10 +14,47 @@ function jsonObjects(text){const objects=[];for(let start=0;start<text.length;st
 function extract(raw){const text=String(raw||'').trim();try{return JSON.parse(text)}catch{}const candidates=[text];for(const match of text.matchAll(/```(?:json)?\s*([\s\S]*?)```/gi))candidates.push(match[1].trim());const parsed=[];for(const candidate of [...candidates,...candidates.flatMap(jsonObjects)]){try{parsed.push(JSON.parse(candidate));continue;}catch{}if(/[“”＂‘’]/.test(candidate))try{parsed.push(JSON.parse(normalizeJsonQuotes(candidate)))}catch{}}const result=parsed.find(value=>value?.schema===SCHEMA)||parsed[0];if(result)return result;throw Error('ChatGPTの返答からJSON部分を読み取れませんでした。JSON部分のみ貼り付けてください。');}
 function extractSingle(raw){return extract(raw);}
 function warnings(plans){const result=[],dates=rows=>rows.map(p=>short(p.date)).join('、');for(const axis of validAxes){const count=plans.filter(p=>p.primaryPurpose===axis).length;if(count)result.push({level:'情報',text:`主目的 ${axis}：${count}件（固定比率なし）`});}const noCta=plans.filter(p=>!p.CTA);if(noCta.length)result.push({level:'情報',text:`CTAなし：${noCta.length}件（CTAは任意、対象日：${dates(noCta)}）`});return result;}
-function validate(data){if(!data||data.schema!==SCHEMA||data.scope!=='ten-day'||!Array.isArray(data.plans))throw Error('10日企画JSONのschemaまたは形式が一致しません。');const period=salesCycleBlock(),from=period?.from||demo.planStart,to=period?.to||dayAdd(from,9),seen=new Set;for(const p of data.plans){if(!p||!/^\d{4}-\d{2}-\d{2}$/.test(p.date||'')||p.date<from||p.date>to)throw Error(`${p?.date||'日付未設定'}は対象期間外です。`);if(seen.has(p.date))throw Error(`${short(p.date)}の日付が重複しています。`);if(blocked(p.date))throw Error(`${short(p.date)}は投稿不可日のためplansに含められません。`);seen.add(p.date);if(!OFFICIAL_TOPICS.some(t=>t.id===p.themeId)||!validAxes.includes(p.primaryPurpose)||!['Feed','Reel'].includes(p.format))throw Error(`${p.date}のテーマ・主目的・形式を確認してください。`);if(!String(p.mainPostBody||'').trim()||!String(p.customerValue||'').trim()||![p.story1,p.story2,p.story3,p.story4].every(s=>String(s?.text||'').trim()))throw Error(`${p.date}の本文・customerValue・Story1〜4を確認してください。`);if(!Array.isArray(p.products)||p.products.some(id=>!sku(id)||sku(id).deleted))throw Error(`${p.date}の商品IDが商品管理にありません。`);}for(let date=from;date<=to;date=dayAdd(date,1))if(!blocked(date)&&!seen.has(date))throw Error(`${short(date)}の企画がありません。`);return warnings(data.plans);}
-function openImport(){openForm('ChatGPTの10日企画を取り込む','<p>ChatGPTのJSON返答を貼り付けてください。確定前に10日全体をプレビューします。</p><label class="wlabel">JSON<textarea name="json" rows="12" required></textarea></label>',f=>{const data=extract(f.get('json')),warn=validate(data);preview={data,warn};showPreview();return false;});}
+function importPeriod(data){
+ const block=salesCycleBlock();
+ if(!block||!Array.isArray(data?.plans)||!data.plans.length)throw Error('対象期間の投稿案がありません。');
+ const periods=[{from:block.from,to:block.to,dayFrom:block.dayFrom},{from:block.nextFrom,to:block.nextTo,dayFrom:block.nextDayFrom}];
+ const first=data.plans[0]?.date,target=periods.find(period=>first>=period.from&&first<=period.to);
+ if(!target)throw Error(`${first||'日付未設定'}は現在期間・次の期間の対象外です。`);
+ return target;
+}
+function validate(data){
+ if(!data||data.schema!==SCHEMA||data.scope!=='ten-day'||!Array.isArray(data.plans))throw Error('10日企画JSONのschemaまたは形式が一致しません。');
+ const period=importPeriod(data),seen=new Set();
+ for(const p of data.plans){
+  if(!p||!/^\d{4}-\d{2}-\d{2}$/.test(p.date||'')||p.date<period.from||p.date>period.to)throw Error(`${p?.date||'日付未設定'}は選択された期間の対象外です。`);
+  if(seen.has(p.date))throw Error(`${short(p.date)}の日付が重複しています。`);
+  if(blocked(p.date))throw Error(`${short(p.date)}は投稿不可日のためplansに含められません。`);
+  const expectedDay=period.dayFrom+dayDiff(p.date,period.from);
+  if(p.dayNumber!==expectedDay)throw Error(`${short(p.date)}のDayは${expectedDay}にしてください。`);
+  seen.add(p.date);
+  if(!OFFICIAL_TOPICS.some(t=>t.id===p.themeId)||!validAxes.includes(p.primaryPurpose)||!['Feed','Reel'].includes(p.format))throw Error(`${p.date}のテーマ・主目的・形式を確認してください。`);
+  if(!String(p.mainPostBody||'').trim()||!String(p.customerValue||'').trim()||![p.story1,p.story2,p.story3,p.story4].every(s=>String(s?.text||'').trim()))throw Error(`${p.date}の本文・customerValue・Story1〜4を確認してください。`);
+  if(!Array.isArray(p.products)||p.products.some(id=>!sku(id)||sku(id).deleted))throw Error(`${p.date}の商品IDが商品管理にありません。`);
+ }
+ for(let date=period.from;date<=period.to;date=dayAdd(date,1))if(!blocked(date)&&!seen.has(date))throw Error(`${short(date)}の企画がありません。`);
+ return warnings(data.plans);
+}
+function openImport(){openForm('ChatGPTの10日企画を取り込む','<p>ChatGPTのJSON返答を貼り付けてください。確定前に10日全体をプレビューします。</p><label class="wlabel">JSON<textarea name="json" rows="12" required></textarea></label>',f=>{const data=extract(f.get('json')),warn=validate(data);preview={data,warn,period:importPeriod(data)};showPreview();return false;});}
 function showPreview(){const d=preview.data,group=level=>preview.warn.filter(w=>w.level===level);openForm('10日全体プレビュー',`<p class="tiny muted">投稿可能な${d.plans.length}日分を確認してから確定してください。確定後は編集済み・投稿済みの内容を維持します。</p>`+(['要確認','情報'].map(level=>group(level).length?`<details class="card" ${level==='要確認'?'open':''}><summary>${level} · ${group(level).length}件</summary>${group(level).map(w=>`<p class="tiny">${html(w.text)}</p>`).join('')}</details>`:'').join(''))+d.plans.map(p=>{const topic=OFFICIAL_TOPICS.find(t=>t.id===p.themeId);return `<details class="card editorial-day-preview"><summary>Day${html(Number(cycleDay(p.date).replace(/\D/g,'')))}｜${html(short(p.date))} · ${html(p.format)} · ${html(topic?.group||'')} #${html(topic?.number||'')}</summary><p class="tiny muted">正式テーマ：${html(topic?.title||'未確認')}</p><h3>${html(p.mainTopic)}</h3><p><strong>主目的：</strong>${html(p.primaryPurpose)}</p><p><strong>お客様に届ける価値：</strong>${html(p.customerValue)}</p><p><strong>使用商品：</strong>${html((p.products||[]).map(skuLabel).join(' / ')||'商品なし')}</p><p><strong>メイン本文</strong><br>${html(p.mainPostBody)}</p>${[1,2,3,4].map(n=>`<p><strong>Story ${n}</strong><br>${html(p['story'+n].text)}</p>`).join('')}<p><strong>CTA：</strong>${html(p.CTA||'CTAなし')}</p></details>`;}).join('')+'<p class="tiny muted">以下の「保存する」で確定します。内容と保護対象を確認してください。</p>',()=>applyPreview());}
-function applyPreview(){for(const x of preview.data.plans){const old=demo.posts.find(p=>p.date===x.date&&!p.deleted);if(old&&(protectedPost(old)))continue;const topic=OFFICIAL_TOPICS.find(t=>t.id===x.themeId),base=old||{id:newId(),date:x.date,plannedTime:'18:00',actualAt:null,revision:1,manual:false,shots:[],reviewNeeded:[]};Object.assign(base,{format:x.format,primaryAxis:x.primaryPurpose,parentId:x.themeId,topicGroup:topic.group,theme:x.mainTopic,derivedTheme:x.mainTopic,takeaway:x.customerValue,caption:x.mainPostBody,cta:x.CTA||'',skuIds:[...(x.products||[])],stories:[x.story1,x.story2,x.story3,x.story4].map((s,i)=>({...s,slot:i+1,purpose:STORY_ROLES[i],skuIds:s.skuIds||[],storySpecVersion:4})),researchRequired:!!topic.researchRequired,revision:(base.revision||0)+1,manual:false,editorialSource:'chatgpt-import'});if(!old)demo.posts.push(base);}persist();refreshWork();preview=null;}
+const renderPeriodPreview=showPreview;
+showPreview=function(){
+  renderPeriodPreview();
+  const {period,data}=preview,form=dx('#workForm');
+  form.insertAdjacentHTML('afterbegin',`<p class="tiny muted">対象期間：${html(short(period.from))}〜${html(short(period.to))}・Day${period.dayFrom}〜${period.dayFrom+dayDiff(period.to,period.from)}</p>`);
+  form.querySelectorAll('.editorial-day-preview summary').forEach((summary,i)=>{summary.textContent=summary.textContent.replace(/^Day\d+/,`Day${data.plans[i].dayNumber}`);});
+};
+function applyPreview(){
+  if(!preview)throw Error('プレビューを開き直してください。');
+  const period=importPeriod(preview.data);
+  if(period.from!==preview.period.from||period.to!==preview.period.to)throw Error('対象期間が変わりました。プレビューを開き直してください。');
+  validate(preview.data);
+  for(const x of preview.data.plans){const old=demo.posts.find(p=>p.date===x.date&&!p.deleted);if(old&&(protectedPost(old)))continue;const topic=OFFICIAL_TOPICS.find(t=>t.id===x.themeId),base=old||{id:newId(),date:x.date,plannedTime:'18:00',actualAt:null,revision:1,manual:false,shots:[],reviewNeeded:[]};Object.assign(base,{format:x.format,primaryAxis:x.primaryPurpose,parentId:x.themeId,topicGroup:topic.group,theme:x.mainTopic,derivedTheme:x.mainTopic,takeaway:x.customerValue,caption:x.mainPostBody,cta:x.CTA||'',skuIds:[...(x.products||[])],stories:[x.story1,x.story2,x.story3,x.story4].map((s,i)=>({...s,slot:i+1,purpose:STORY_ROLES[i],skuIds:s.skuIds||[],storySpecVersion:4})),researchRequired:!!topic.researchRequired,revision:(base.revision||0)+1,manual:false,editorialSource:'chatgpt-import'});if(!old)demo.posts.push(base);}persist();refreshWork();preview=null;
+}
 function copyText(scope){navigator.clipboard.writeText(prompt(scope)).then(()=>toast((scope==='month'?'月間':'10日')+'編集コンテキストをコピーしました'));}
 const oldPlan=renderPlan;renderPlan=function(){oldPlan();for(const button of document.querySelectorAll('#planList [data-work-post]')){const post=demo.posts.find(p=>p.id===button.dataset.workPost),badge=button.closest('article')?.querySelector('.row.between .badge:last-child');if(post&&badge)badge.textContent=post.format==='Reel'?'Reel':'Feed';}const box=dx('#planPeriodCard .actions');if(box){box.innerHTML='<button class="secondary" id="copyTenEditorial">ChatGPT用10日企画をコピー</button><button class="ghost" id="importTenEditorial">JSONを貼り付ける</button>';dx('#copyTenEditorial').onclick=()=>copyText('ten-day');dx('#importTenEditorial').onclick=openImport;}};
 const oldMonth=renderMonthWork;renderMonthWork=function(){oldMonth();const head=dx('#view-month > .row');if(head&&!dx('#copyMonthEditorial'))head.insertAdjacentHTML('afterend','<article class="card"><h3>月間編集計画</h3><p>販売・商品・履歴・反応をまとめてChatGPTへ渡します。</p><button class="secondary full" id="copyMonthEditorial">ChatGPT用月間コンテキストをコピー</button></article>');dx('#copyMonthEditorial')?.addEventListener('click',()=>copyText('month'),{once:true});};
