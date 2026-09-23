@@ -82,5 +82,9 @@ const editorialShowPost=showPost;showPost=function(id){
  }
 };
 document.head.insertAdjacentHTML('beforeend','<style>.editorial-diff{border-left:3px solid #53695f;background:#f0f2ef;padding:8px 10px;border-radius:6px;white-space:pre-wrap;overflow-wrap:anywhere}.editorial-diff .badge{margin-left:8px}#singleDayEditorial{margin:8px 0 16px}#singleDayWarningEditorial{margin-top:8px}</style>');
+const originalPrompt=prompt;
+prompt=function(scope){return originalPrompt(scope).replace('返答は説明文を付けずJSONだけにしてください。', `本文は300文字以上。文字数の水増しではなく、cian en paclamの元タンナー・作り手として確認できる素材、仕上げ、工程、構造、実際の使用場面を具体的に扱ってください。一般論だけにせず、疑問→実物で確かめる知識→暮らしでの使い道を投稿ごとに自然につないでください。未確認の経験や商品性能は創作しません。保存記録に根拠がないアンケート結果・質問回答・お客様の声は事実として書かず、記録があっても意味を変えません。顧客反応は判断材料であり毎日強制採用しません。\n\nStory1はメインの要約ではなく別の知識。Story2は自由回答なら質問スタンプ、2〜4択ならアンケートかクイズを選び、直近と同じ質問を避けます。Story3はStory1と別の被写体・学びを示し、商品が主役なら商品紹介、例示だけなら非商品として扱います。Story4はStory3の言い換えや単なる「投稿を見て」ではなく、今日のメイン投稿で具体的に何を確かめられるかを示します。撮影指示は各カットに何を・どう撮る・何を伝えるを含め、Feedは写真、Reelは動画に合わせます。完成後に本文・Story1〜4・撮影を再読し、同じ行動・学び・被写体、根拠のない声、回答形式や商品分類の不一致を解消してください。\n\n返答は説明文を付けずJSONだけにしてください。`);};
+const originalSinglePrompt=singlePrompt;
+singlePrompt=function(post){return originalSinglePrompt(post).replace('返答は説明なしの1日分JSONだけ：', `本文は300文字以上で、その日固有の素材・仕上げ・工程・構造・使う場面を具体的に扱い、一般論の水増しにしないでください。保存された記録に根拠のないアンケート結果・お客様の声を創作しないでください。Story1〜4は同じ行動・学び・被写体を繰り返さず、Story2の選択肢と回答方法、Story3の商品分類、Story4の投稿を見る具体的理由を確認してください。Feedは写真、Reelは動画に合う撮影案を考えてください。\n\n返答は説明なしの1日分JSONだけ：`);};
 window.editorialPlanner={context,prompt,extract,validate,warnings,singleContext,singlePrompt,validateSingle,periodReview};refreshWork();
 })();
