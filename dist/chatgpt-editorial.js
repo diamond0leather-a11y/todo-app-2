@@ -77,6 +77,13 @@ function importPeriod(data){
  if(!target)throw Error(`${first||'日付未設定'}は現在期間・次の期間の対象外です。`);
  return target;
 }
+function importProtection(post,choice){
+ if(!post)return {whole:false,meta:false,caption:false,stories:[]};
+ if(post.actualAt||post.actualSnapshot||post.deleted||post.posted||post.status==='posted'||post.edited)return {whole:true,meta:true,caption:true,stories:[true,true,true,true]};
+ const fields=post.manualFields;
+ if((post.manual&&!fields)||(fields&&fields.revision!==post.revision))return choice?{whole:choice.meta&&choice.caption&&choice.stories.every(Boolean),meta:choice.meta,caption:choice.caption,stories:choice.stories}:{whole:true,meta:true,caption:true,stories:[true,true,true,true]};
+ return {whole:false,meta:false,caption:!!fields?.caption,stories:[0,1,2,3].map(i=>!!(post.stories?.[i]?.manual||fields?.stories?.[i]))};
+}
 function validate(data){
  if(!data||data.schema!==SCHEMA||data.scope!=='ten-day'||!Array.isArray(data.plans))throw Error('10日企画JSONのschemaまたは形式が一致しません。');
  const period=importPeriod(data),seen=new Set();
@@ -98,13 +105,17 @@ function validate(data){
  for(let date=period.from;date<=period.to;date=dayAdd(date,1))if(!blocked(date)&&!seen.has(date))throw Error(`${short(date)}の企画がありません。`);
  return [...warnings(data.plans),...qualityAudit(data.plans).issues];
 }
-function openImport(){openForm('ChatGPTの10日企画を取り込む','<p>ChatGPTのJSON返答を貼り付けてください。確定前に10日全体をプレビューします。</p><label class="wlabel">JSON<textarea name="json" rows="12" required></textarea></label>',f=>{const data=extract(f.get('json')),warn=validate(data);preview={data,warn,period:importPeriod(data),researchConfirmed:false};showPreview();return false;});}
+function openImport(){openForm('ChatGPTの10日企画を取り込む','<p>ChatGPTのJSON返答を貼り付けてください。確定前に10日全体をプレビューします。</p><label class="wlabel">JSON<textarea name="json" rows="12" required></textarea></label>',f=>{const data=extract(f.get('json')),warn=validate(data),revisions=Object.fromEntries(data.plans.map(plan=>{const post=demo.posts.find(p=>p.date===plan.date&&!p.deleted);return [plan.date,post?{id:post.id,revision:post.revision}:null];})),legacyChoices={};for(const plan of data.plans){const post=demo.posts.find(p=>p.date===plan.date&&!p.deleted);if(post?.manual&&!post.manualFields&&!post.actualAt&&!post.actualSnapshot)legacyChoices[plan.date]={meta:true,caption:true,stories:[true,true,true,true]};}preview={data,warn,period:importPeriod(data),revisions,legacyChoices,researchConfirmed:false};showPreview();return false;});}
 function showPreview(){const d=preview.data,group=level=>preview.warn.filter(w=>w.level===level);openForm('10日全体プレビュー',`<p class="tiny muted">投稿可能な${d.plans.length}日分を確認してから確定してください。確定後は編集済み・投稿済みの内容を維持します。</p>`+(['要確認','情報'].map(level=>group(level).length?`<details class="card" ${level==='要確認'?'open':''}><summary>${level} · ${group(level).length}件</summary>${group(level).map(w=>`<p class="tiny">${html(w.text)}</p>`).join('')}</details>`:'').join(''))+d.plans.map(p=>{const topic=OFFICIAL_TOPICS.find(t=>t.id===p.themeId);return `<details class="card editorial-day-preview"><summary>Day${html(Number(cycleDay(p.date).replace(/\D/g,'')))}｜${html(short(p.date))} · ${html(p.format)} · ${html(topic?.group||'')} #${html(topic?.number||'')}</summary><p class="tiny muted">正式テーマ：${html(topic?.title||'未確認')}</p><h3>${html(p.mainTopic)}</h3><p><strong>主目的：</strong>${html(p.primaryPurpose)}</p><p><strong>お客様に届ける価値：</strong>${html(p.customerValue)}</p><p><strong>使用商品：</strong>${html((p.products||[]).map(skuLabel).join(' / ')||'商品なし')}</p><p><strong>メイン本文</strong><br>${html(p.mainPostBody)}</p>${[1,2,3,4].map(n=>`<p><strong>Story ${n}</strong><br>${html(p['story'+n].text)}</p>`).join('')}<p><strong>CTA：</strong>${html(p.CTA||'CTAなし')}</p></details>`;}).join('')+'<p class="tiny muted">以下の「保存する」で確定します。内容と保護対象を確認してください。</p>',()=>applyPreview());}
 const renderPeriodPreview=showPreview;
 showPreview=function(){
   renderPeriodPreview();
   const {period,data}=preview,form=dx('#workForm');
   form.insertAdjacentHTML('afterbegin',`<p class="tiny muted">対象期間：${html(short(period.from))}〜${html(short(period.to))}・Day${period.dayFrom}〜${period.dayFrom+dayDiff(period.to,period.from)}</p>`);
+  const protectedDays=data.plans.map(plan=>{const post=demo.posts.find(p=>p.date===plan.date&&!p.deleted),lock=importProtection(post);if(!post||!lock.whole&&!post.manual&&!lock.stories.some(Boolean))return null;return `${short(plan.date)}：${lock.whole?'既存投稿全体を維持':[lock.caption?'手動本文を維持':'',...lock.stories.flatMap((value,i)=>value?[`Story${i+1}を維持`]:[])].filter(Boolean).join('・')}`;}).filter(Boolean);
+  if(protectedDays.length)form.insertAdjacentHTML('afterbegin',`<div class="notice"><strong>保存時に維持する編集内容</strong>${protectedDays.map(line=>`<p class="tiny">${html(line)}</p>`).join('')}</div>`);
+  for(const date of Object.keys(preview.legacyChoices)){const post=demo.posts.find(p=>p.date===date&&!p.deleted),controls=[['meta','企画・商品・CTA'],['caption','本文'],...[0,1,2,3].map(i=>['story'+i,`Story${i+1}`])];form.insertAdjacentHTML('afterbegin',`<details class="card" open><summary>${html(short(date))}｜従来の手動編集を確認</summary><p class="tiny">旧データは編集箇所を特定できません。初期状態は全項目を維持します。新案に置き換えてよい項目だけチェックを外してください。投稿済みは変更できません。</p><p class="tiny">現在：${html(post.theme||'')} ／ 新案：${html(data.plans.find(p=>p.date===date).mainTopic)}</p>${controls.map(([key,label])=>`<label class="pick-name"><input type="checkbox" data-legacy-preserve="${html(date)}|${key}" checked>${label}を維持</label>`).join('')}</details>`);}
+  form.querySelectorAll('[data-legacy-preserve]').forEach(input=>input.onchange=()=>{const [date,key]=input.dataset.legacyPreserve.split('|'),choice=preview.legacyChoices[date];if(key.startsWith('story'))choice.stories[Number(key.slice(5))]=input.checked;else choice[key]=input.checked;});
   form.querySelectorAll('.editorial-day-preview summary').forEach((summary,i)=>{summary.textContent=summary.textContent.replace(/^Day\d+/,`Day${data.plans[i].dayNumber}`);});
   const audit=qualityAudit(data.plans),issues=preview.warn.filter(note=>note.level==='要修正'),topics={},formats={},purposes={},research=data.plans.filter(plan=>{const topic=OFFICIAL_TOPICS.find(entry=>entry.id===plan.themeId);return topic?.number>=66&&topic.number<=80;});
   for(const plan of data.plans){const topic=OFFICIAL_TOPICS.find(entry=>entry.id===plan.themeId);topics[topic?.group||'未分類']=(topics[topic?.group||'未分類']||0)+1;formats[plan.format]=(formats[plan.format]||0)+1;purposes[plan.primaryPurpose]=(purposes[plan.primaryPurpose]||0)+1;}
@@ -125,8 +136,19 @@ function applyPreview(){
   if(validate(preview.data).some(note=>note.level==='要修正'))throw Error('10日全体の内容を修正してから再度取り込んでください。');
   if(qualityAudit(preview.data.plans).exposure.issues.some(note=>note.level==='商品露出要確認')&&!preview.exposureConfirmed)throw Error('商品露出の企画理由を確認してください。');
   if(preview.data.plans.some(plan=>{const topic=OFFICIAL_TOPICS.find(entry=>entry.id===plan.themeId);return topic?.number>=66&&topic.number<=80;})&&!preview.researchConfirmed)throw Error('INDUSTRYの出典確認が必要です。');
+  for(const plan of preview.data.plans){const old=demo.posts.find(p=>p.date===plan.date&&!p.deleted),seen=preview.revisions[plan.date];if((old?.id||null)!==(seen?.id||null)||(old?.revision||null)!==(seen?.revision||null))throw Error(`${short(plan.date)}の投稿がプレビュー中に変更されました。開き直して確認してください。`);}
   displayedPeriod=period.from===salesCycleBlock().nextFrom?'next':'current';
-  for(const x of preview.data.plans){const old=demo.posts.find(p=>p.date===x.date&&!p.deleted);if(old&&(protectedPost(old)))continue;const topic=OFFICIAL_TOPICS.find(t=>t.id===x.themeId),base=old||{id:newId(),date:x.date,plannedTime:'18:00',actualAt:null,revision:1,manual:false,shots:[],reviewNeeded:[]};Object.assign(base,{format:x.format,primaryAxis:x.primaryPurpose,parentId:x.themeId,topicGroup:topic.group,theme:x.mainTopic,derivedTheme:x.mainTopic,takeaway:x.customerValue,caption:x.mainPostBody,cta:x.CTA||'',skuIds:[...(x.products||[])],stories:[x.story1,x.story2,x.story3,x.story4].map((s,i)=>({...s,slot:i+1,purpose:STORY_ROLES[i],skuIds:s.skuIds||[],storySpecVersion:4})),researchRequired:!!topic.researchRequired,researchSources:x.researchSources||[],researchVerified:topic.number>=66&&topic.number<=80?preview.researchConfirmed:false,revision:(base.revision||0)+1,manual:false,editorialSource:'chatgpt-import'});if(!old)demo.posts.push(base);}persist();refreshWork();preview=null;
+  for(const x of preview.data.plans){
+    const old=demo.posts.find(p=>p.date===x.date&&!p.deleted),lock=importProtection(old,preview.legacyChoices[x.date]);
+    if(lock.whole)continue;
+    const topic=OFFICIAL_TOPICS.find(t=>t.id===x.themeId),base=old||{id:newId(),date:x.date,plannedTime:'18:00',actualAt:null,revision:0,manual:false,shots:[],reviewNeeded:[]};
+    const stories=[x.story1,x.story2,x.story3,x.story4].map((story,i)=>lock.stories[i]?base.stories[i]:({...story,slot:i+1,purpose:STORY_ROLES[i],skuIds:story.skuIds||[],storySpecVersion:4}));
+    if(!lock.meta)Object.assign(base,{format:x.format,primaryAxis:x.primaryPurpose,parentId:x.themeId,topicGroup:topic.group,theme:x.mainTopic,derivedTheme:x.mainTopic,takeaway:x.customerValue,cta:x.CTA||'',skuIds:[...(x.products||[])],researchRequired:!!topic.researchRequired,researchSources:x.researchSources||[],researchVerified:topic.number>=66&&topic.number<=80?preview.researchConfirmed:false});
+    Object.assign(base,{caption:lock.caption?base.caption:x.mainPostBody,stories,revision:(base.revision||0)+1,editorialSource:'chatgpt-import'});
+    if(!old)demo.posts.push(base);else if(!base.manual&&!lock.stories.some(Boolean))base.shots=[];
+    if(base.manualFields)base.manualFields.revision=base.revision;
+  }
+  persist();refreshWork();preview=null;
 }
 function copyText(scope){const selected=scope==='ten-day'&&displayedPeriod==='next'?nextEditorialPrompt():prompt(scope);navigator.clipboard.writeText(selected).then(()=>toast((scope==='month'?'月間':'表示中の期間の')+'編集コンテキストをコピーしました'));}
 const oldPlan=renderPlan;renderPlan=function(){oldPlan();for(const button of document.querySelectorAll('#planList [data-work-post]')){const post=demo.posts.find(p=>p.id===button.dataset.workPost),badge=button.closest('article')?.querySelector('.row.between .badge:last-child');if(post&&badge)badge.textContent=post.format==='Reel'?'Reel':'Feed';}const box=dx('#planPeriodCard .actions');if(box){box.innerHTML='<button class="secondary" id="copyTenEditorial">ChatGPT用10日企画をコピー</button><button class="ghost" id="importTenEditorial">JSONを貼り付ける</button>';dx('#copyTenEditorial').onclick=()=>copyText('ten-day');dx('#importTenEditorial').onclick=openImport;}};
@@ -239,5 +261,16 @@ renderPlan=function(){
  switcher.querySelectorAll('button').forEach(button=>button.onclick=()=>select(button.dataset.editorialPeriod));select(displayedPeriod);
 };
 document.head.insertAdjacentHTML('beforeend','<style>#planList .stack[hidden],#planAxisSummary[hidden]{display:none!important}[data-editorial-period].active{background:#384f3b;color:#fff}</style>');
+let pendingManualStory=null;
+document.addEventListener('click',event=>{
+ const button=event.target.closest('button');if(!button)return;
+ if(button.dataset.finalStoryEdit){const [id,index,mode]=button.dataset.finalStoryEdit.split('|');pendingManualStory=mode==='saved'?{id,index:Number(index)}:null;}
+ if(button.dataset.workSaveCaption){const post=demo.posts.find(p=>p.id===button.dataset.workSaveCaption);if(post&&(!post.manual||post.manualFields?.revision===post.revision)){post.manualFields||={};post.manualFields.caption=true;post.manualFields.revision=post.revision+1;}}
+},true);
+document.addEventListener('submit',event=>{
+ if(event.target.id!=='workForm'||!pendingManualStory||!/^Story \d+/.test(dx('#workTitle').textContent))return;
+ const post=demo.posts.find(p=>p.id===pendingManualStory.id);if(post&&(!post.manual||post.manualFields?.revision===post.revision)){post.manualFields||={};post.manualFields.stories||=[];post.manualFields.stories[pendingManualStory.index]=true;post.manualFields.revision=post.revision+1;}
+ pendingManualStory=null;
+},true);
 window.editorialPlanner={context,prompt,nextContext:nextEditorialContext,nextPrompt:nextEditorialPrompt,extract,validate,warnings,singleContext,singlePrompt,validateSingle,periodReview};refreshWork();
 })();
