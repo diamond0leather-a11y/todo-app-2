@@ -124,7 +124,7 @@ function applyPreview(){
   displayedPeriod=period.from===salesCycleBlock().nextFrom?'next':'current';
   for(const x of preview.data.plans){const old=demo.posts.find(p=>p.date===x.date&&!p.deleted);if(old&&(protectedPost(old)))continue;const topic=OFFICIAL_TOPICS.find(t=>t.id===x.themeId),base=old||{id:newId(),date:x.date,plannedTime:'18:00',actualAt:null,revision:1,manual:false,shots:[],reviewNeeded:[]};Object.assign(base,{format:x.format,primaryAxis:x.primaryPurpose,parentId:x.themeId,topicGroup:topic.group,theme:x.mainTopic,derivedTheme:x.mainTopic,takeaway:x.customerValue,caption:x.mainPostBody,cta:x.CTA||'',skuIds:[...(x.products||[])],stories:[x.story1,x.story2,x.story3,x.story4].map((s,i)=>({...s,slot:i+1,purpose:STORY_ROLES[i],skuIds:s.skuIds||[],storySpecVersion:4})),researchRequired:!!topic.researchRequired,researchSources:x.researchSources||[],researchVerified:topic.number>=66&&topic.number<=80?preview.researchConfirmed:false,revision:(base.revision||0)+1,manual:false,editorialSource:'chatgpt-import'});if(!old)demo.posts.push(base);}persist();refreshWork();preview=null;
 }
-function copyText(scope){navigator.clipboard.writeText(prompt(scope)).then(()=>toast((scope==='month'?'月間':'10日')+'編集コンテキストをコピーしました'));}
+function copyText(scope){const selected=scope==='ten-day'&&displayedPeriod==='next'?nextEditorialPrompt():prompt(scope);navigator.clipboard.writeText(selected).then(()=>toast((scope==='month'?'月間':'表示中の期間の')+'編集コンテキストをコピーしました'));}
 const oldPlan=renderPlan;renderPlan=function(){oldPlan();for(const button of document.querySelectorAll('#planList [data-work-post]')){const post=demo.posts.find(p=>p.id===button.dataset.workPost),badge=button.closest('article')?.querySelector('.row.between .badge:last-child');if(post&&badge)badge.textContent=post.format==='Reel'?'Reel':'Feed';}const box=dx('#planPeriodCard .actions');if(box){box.innerHTML='<button class="secondary" id="copyTenEditorial">ChatGPT用10日企画をコピー</button><button class="ghost" id="importTenEditorial">JSONを貼り付ける</button>';dx('#copyTenEditorial').onclick=()=>copyText('ten-day');dx('#importTenEditorial').onclick=openImport;}};
 const oldMonth=renderMonthWork;renderMonthWork=function(){oldMonth();const head=dx('#view-month > .row');if(head&&!dx('#copyMonthEditorial'))head.insertAdjacentHTML('afterend','<article class="card"><h3>月間編集計画</h3><p>販売・商品・履歴・反応をまとめてChatGPTへ渡します。</p><button class="secondary full" id="copyMonthEditorial">ChatGPT用月間コンテキストをコピー</button></article>');dx('#copyMonthEditorial')?.addEventListener('click',()=>copyText('month'),{once:true});};
 const SINGLE_SCOPE='single-day-reproposal';
@@ -209,7 +209,7 @@ function nextEditorialPrompt(){
  const data=nextEditorialContext(),base=prompt('ten-day'),marker='\n\n編集コンテキスト：\n',split=base.lastIndexOf(marker);
  if(split<0)throw Error('編集コンテキストを作成できません。');
  const first=data.period.days.find(day=>!day.blocked)?.dayNumber||data.period.days[0]?.dayNumber||1;
- const intro=base.slice(0,split).replace(/実投稿履歴：\d+件/,`実投稿履歴：${data.actualHistory.count}件`).replace(/予定投稿：\d+件/,`予定投稿：${data.plannedPosts.count}件`).replace(/"dayNumber":\d+/,`"dayNumber":${first}`);
+ const intro=base.slice(0,split).replace('10日分のFeed / Reel / Story1〜4',`${data.period.days.length}日分のFeed / Reel / Story1〜4`).replace(/実投稿履歴：\d+件/,`実投稿履歴：${data.actualHistory.count}件`).replace(/予定投稿：\d+件/,`予定投稿：${data.plannedPosts.count}件`).replace(/"dayNumber":\d+/,`"dayNumber":${first}`);
  return intro+marker+JSON.stringify(data,null,2);
 }
 const planWithNextEditorial=renderPlan;
@@ -217,8 +217,6 @@ let displayedPeriod='current';
 renderPlan=function(){
  planWithNextEditorial();
  const next=dx('#planPeriodCard .next-plan-period');if(!next)return;
- next.insertAdjacentHTML('beforeend','<button type="button" class="secondary full" id="copyNextTenEditorial">次の10日を準備｜ChatGPT用にコピー</button>');
- dx('#copyNextTenEditorial').onclick=()=>{try{navigator.clipboard.writeText(nextEditorialPrompt()).then(()=>toast('次の期間の編集コンテキストをコピーしました')).catch(()=>toast('コピーできませんでした。ブラウザの権限を確認してください。'));}catch(error){toast(error.message);}};
  const period=salesCycleBlock(),list=dx('#planList');
  const nextPosts=demo.posts.filter(post=>!post.deleted&&post.date>=period.nextFrom&&post.date<=period.nextTo).sort((a,b)=>a.date.localeCompare(b.date));
  if(!list||!nextPosts.length)return;
@@ -233,7 +231,7 @@ renderPlan=function(){
  }
  const switcher=document.createElement('div');switcher.className='actions';switcher.innerHTML=`<button type="button" class="secondary" data-editorial-period="current">現在：${html(short(period.from))}〜${html(short(period.to))}</button><button type="button" class="secondary" data-editorial-period="next">次：${html(short(period.nextFrom))}〜${html(short(period.nextTo))}</button>`;
  next.after(switcher);
- const select=target=>{displayedPeriod=target;currentGroup.hidden=target!=='current';nextGroup.hidden=target!=='next';dx('#planAxisSummary').hidden=target==='next';dx('#planDateWork').textContent=target==='next'?planPeriodLabel(period.nextFrom,period.nextTo,period.nextDayFrom,period.nextDayTo):planPeriodLabel(period.from,period.to,period.dayFrom,period.dayTo);switcher.querySelectorAll('button').forEach(button=>button.classList.toggle('active',button.dataset.editorialPeriod===target));};
+ const select=target=>{displayedPeriod=target;currentGroup.hidden=target!=='current';nextGroup.hidden=target!=='next';dx('#planAxisSummary').hidden=target==='next';dx('#planDateWork').textContent=target==='next'?planPeriodLabel(period.nextFrom,period.nextTo,period.nextDayFrom,period.nextDayTo):planPeriodLabel(period.from,period.to,period.dayFrom,period.dayTo);dx('#copyTenEditorial').textContent=`ChatGPT用10日企画をコピー（${target==='next'?'次':'現在'}）`;switcher.querySelectorAll('button').forEach(button=>button.classList.toggle('active',button.dataset.editorialPeriod===target));};
  switcher.querySelectorAll('button').forEach(button=>button.onclick=()=>select(button.dataset.editorialPeriod));select(displayedPeriod);
 };
 document.head.insertAdjacentHTML('beforeend','<style>#planList .stack[hidden],#planAxisSummary[hidden]{display:none!important}[data-editorial-period].active{background:#384f3b;color:#fff}</style>');
