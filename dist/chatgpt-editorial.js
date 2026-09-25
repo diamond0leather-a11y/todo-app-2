@@ -147,6 +147,15 @@ renderPlan=function(){
  const next=dx('#planPeriodCard .next-plan-period');if(!next)return;
  next.insertAdjacentHTML('beforeend','<button type="button" class="secondary full" id="copyNextTenEditorial">次の10日を準備｜ChatGPT用にコピー</button>');
  dx('#copyNextTenEditorial').onclick=()=>{try{navigator.clipboard.writeText(nextEditorialPrompt()).then(()=>toast('次の期間の編集コンテキストをコピーしました')).catch(()=>toast('コピーできませんでした。ブラウザの権限を確認してください。'));}catch(error){toast(error.message);}};
+ const period=salesCycleBlock(),list=dx('#planList');
+ const nextPosts=demo.posts.filter(post=>!post.deleted&&post.date>=period.nextFrom&&post.date<=period.nextTo).sort((a,b)=>a.date.localeCompare(b.date));
+ if(!list||!nextPosts.length)return;
+ list.insertAdjacentHTML('beforeend',`<h3 class="next-plan-list-title">次の期間 ${html(planPeriodLabel(period.nextFrom,period.nextTo,period.nextDayFrom,period.nextDayTo))}</h3>`);
+ for(let date=period.nextFrom;date<=period.nextTo;date=dayAdd(date,1)){
+  const post=nextPosts.find(entry=>entry.date===date),day=`Day${period.nextDayFrom+dayDiff(date,period.nextFrom)}｜${short(date)}`;
+  if(!post){if(blocked(date))list.insertAdjacentHTML('beforeend',`<article class="card blocked-day-card"><span class="badge">${html(day)}</span><h3>投稿不可</h3></article>`);continue;}
+  list.insertAdjacentHTML('beforeend',`<article class="card"><div class="row between"><span class="badge">${html(day)}</span><span class="badge">${post.format==='Reel'?'Reel':'Feed'}</span></div><p class="tiny muted">${html(topicLabel(post))}</p><h3>${html(post.derivedTheme||post.theme)}</h3><p>${html(post.takeaway||'伝えることは未確認')}</p><p class="exact muted">${html(post.skuIds?.length?postLabel(post):post.subjects||'革・工程・道具')}</p><div class="row"><span class="badge">${html(axisShort[post.primaryAxis]||'主目的未確認')}</span><span class="tiny">${post.stories?.length||0} Story · ${(post.shots||[]).reduce((count,shot)=>count+(shot.count||0),0)}カット</span></div>${post.researchRequired?'<p class="notice">要リサーチ</p>':''}<p class="tiny">${post.actualAt?'投稿済み':post.paused?'投稿休止':blocked(date)?'投稿不可日':'予定'}${post.manual?' / 編集済み':''}</p><button class="secondary full" data-work-post="${html(post.id)}">投稿内容を見る・編集</button></article>`);
+ }
 };
 window.editorialPlanner={context,prompt,nextContext:nextEditorialContext,nextPrompt:nextEditorialPrompt,extract,validate,warnings,singleContext,singlePrompt,validateSingle,periodReview};refreshWork();
 })();
