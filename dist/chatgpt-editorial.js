@@ -14,6 +14,46 @@ function jsonObjects(text){const objects=[];for(let start=0;start<text.length;st
 function extract(raw){const text=String(raw||'').trim();try{return JSON.parse(text)}catch{}const candidates=[text];for(const match of text.matchAll(/```(?:json)?\s*([\s\S]*?)```/gi))candidates.push(match[1].trim());const parsed=[];for(const candidate of [...candidates,...candidates.flatMap(jsonObjects)]){try{parsed.push(JSON.parse(candidate));continue;}catch{}if(/[“”＂‘’]/.test(candidate))try{parsed.push(JSON.parse(normalizeJsonQuotes(candidate)))}catch{}}const result=parsed.find(value=>value?.schema===SCHEMA)||parsed[0];if(result)return result;throw Error('ChatGPTの返答からJSON部分を読み取れませんでした。JSON部分のみ貼り付けてください。');}
 function extractSingle(raw){return extract(raw);}
 function warnings(plans){const result=[],dates=rows=>rows.map(p=>short(p.date)).join('、');for(const axis of validAxes){const count=plans.filter(p=>p.primaryPurpose===axis).length;if(count)result.push({level:'情報',text:`主目的 ${axis}：${count}件（固定比率なし）`});}const noCta=plans.filter(p=>!p.CTA);if(noCta.length)result.push({level:'情報',text:`CTAなし：${noCta.length}件（CTAは任意、対象日：${dates(noCta)}）`});return result;}
+function contentText(story){return [story?.text,story?.action,story?.theme,story?.what].filter(Boolean).join(' ');}
+function normalizedContent(value){return String(value||'').normalize('NFKC').toLowerCase().replace(/この紙|裁断用の紙|型紙/g,'型紙').replace(/リール/g,'reel').replace(/[\s。、，．!！?？「」『』（）()・：:―ー〜～]/g,'');}
+function contentSimilarity(left,right){const a=normalizedContent(left),b=normalizedContent(right);if(!a||!b)return 0;if(a===b)return 1;if(Math.min(a.length,b.length)>=14&&(a.includes(b)||b.includes(a)))return .9;const grams=text=>{const result=new Set();for(let i=0;i<text.length-2;i++)result.add(text.slice(i,i+3));return result;},x=grams(a),y=grams(b);return x.size&&y.size?2*[...x].filter(part=>y.has(part)).length/(x.size+y.size):0;}
+const motifs=[['型紙',/型紙|この紙|裁断用の紙/],['革見本',/革見本|サンプル革/],['手入れ',/手入れ|ケア|クリーム/],['裁断',/裁断|切り出/],['縫製',/縫製|縫い目|ステッチ/],['シボ',/シボ|表面の凹凸/],['艶',/艶|つや|光沢/],['収納',/収納|入る量|収まり/],['大きさ',/サイズ|大きさ|寸法/],['経年変化',/経年変化|使い込|色の変化/],['色比較',/色の違い|色比較|色を比べ/],['革比較',/革の違い|革を比べ|革比較/]];
+function sharedMotifs(a,b){return motifs.filter(([,pattern])=>pattern.test(a)&&pattern.test(b)).map(([name])=>name);}
+function answerable(text){return /[?？]|教えて|選んで|投票|答えて|どれ|どちら|何を|どう/.test(text);}
+function storyQuality(plans){const issues=[],add=(date,message)=>issues.push({level:'要修正',text:`${short(date)}：${message}`});
+ for(const plan of plans){const stories=[1,2,3,4].map(n=>plan['story'+n]),texts=stories.map(contentText),second=stories[1],kind=String(second?.kind||second?.stickerType||''),question=String(second?.text||'');
+  if(contentSimilarity(texts[0],plan.mainPostBody)>.78)add(plan.date,'Story1がメイン本文の要約になっています。別の学びにしてください。');
+  if(!answerable(question))add(plan.date,'Story2に回答できる問いがありません。');
+  if(/クイズ/.test(kind+question)){if(!/[?？]|何|どれ|当て/.test(question)||!Array.isArray(second.options)||second.options.length<2||!String(second.correctAnswer||'').trim()||!/同じStory|Story2|正解|答え/.test(String(second.answerLocation||second.action||''))||/Story4/.test(String(second.answerLocation||second.action||'')))add(plan.date,'Story2のクイズは質問・選択肢・正解・同枠内の回答場所を揃えてください。');}
+  else if(/アンケート/.test(kind)&&(!answerable(question)||!Array.isArray(second.options)||second.options.length<2||second.options.length>4))add(plan.date,'Story2のアンケートは質問と2〜4個の選択肢が必要です。');
+  else if(/質問スタンプ/.test(kind)&&!answerable(question))add(plan.date,'Story2の質問スタンプに回答できる問いがありません。');
+  if(contentSimilarity(texts[0],texts[2])>.67)add(plan.date,'Story1とStory3が同じ学び・被写体です。');
+  if(contentSimilarity(texts[2],texts[3])>.58||(/答え|正解/.test(texts[3])&&(/[?？]|クイズ|当て/.test(texts[2])||sharedMotifs(texts[2],texts[3]).length)))add(plan.date,'Story3とStory4が同じ企画の続き・答え合わせです。Story4はメイン投稿への独立した導線にしてください。');
+  for(let a=0;a<4;a++)for(let b=a+1;b<4;b++)if((a!==0||b!==2)&&(a!==2||b!==3)&&contentSimilarity(texts[a],texts[b])>.72)add(plan.date,`Story${a+1}とStory${b+1}の問い・結論・行動が近すぎます。`);
+  if(!/投稿|reel|feed|リール|動画|本文|メイン/i.test(texts[3])||normalizedContent(texts[3]).length<18||/^(今日の)?投稿を見て(ください|ね)?[。!！]*$/.test(String(stories[3]?.text||'').trim()))add(plan.date,'Story4にメイン投稿で確かめられる具体的な理由がありません。');
+ }
+ for(let i=0;i<plans.length;i++)for(let j=i+1;j<plans.length;j++){const a=plans[i],b=plans[j],a2=contentText(a.story2),b2=contentText(b.story2);
+  if(contentSimilarity(a2,b2)>.64)issues.push({level:'要修正',text:`${short(a.date)}と${short(b.date)}：Story2の質問・企画が重複しています。`});
+  for(const slot of [1,3,4]){const left=contentText(a['story'+slot]),right=contentText(b['story'+slot]);if(contentSimilarity(left,right)>.72||(sharedMotifs(left,right).length>=2&&contentSimilarity(left,right)>.42))issues.push({level:'要修正',text:`${short(a.date)}と${short(b.date)}：Story${slot}の学び・被写体が近すぎます。`});}
+  if(contentSimilarity([a.mainTopic,a.angle,a.customerValue].join(' '),[b.mainTopic,b.angle,b.customerValue].join(' '))>.68||contentSimilarity(a.mainPostBody,b.mainPostBody)>.78)issues.push({level:'要修正',text:`${short(a.date)}と${short(b.date)}：メイン投稿の企画・顧客価値が近すぎます。`});
+ }
+ const ctas={};for(const plan of plans){const key=normalizedContent(plan.CTA);if(key)(ctas[key]||=[]).push(plan.date);}for(const dates of Object.values(ctas))if(dates.length>=3)issues.push({level:'要修正',text:`同じCTAが${dates.length}日あります（${dates.map(short).join('、')}）。`});
+ return issues;
+}
+function exposureAudit(plans){const products=productContext(),dates=plans.map(plan=>plan.date).sort(),history=postHistories(dates[0],dates.at(-1)),recent=exposureSummary(history.actualHistory),sale=monthlySaleStrategy(dates[0],dates.at(-1)),counts={sku:{},item:{},category:{},color:{},miniWallet:0,wallet:0,black:0},issues=[],days=plans.length;
+ for(const plan of plans){const ids=[...new Set([...(plan.products||[]),...[1,2,3,4].flatMap(n=>plan['story'+n]?.skuIds||[])])],items=new Set(),categories=new Set(),colors=new Set();let mini=false,wallet=false,black=false;
+  for(const id of ids){const product=products.find(row=>row.id===id);if(!product)continue;counts.sku[id]=(counts.sku[id]||0)+1;items.add(product.item);categories.add(product.category);if(product.color)colors.add(product.color);const label=[product.item,product.category,product.name,product.color].join(' ');mini||=/mini wallet/i.test(label);wallet||=/wallet|財布/i.test(label);black||=/black|noir|黒/i.test(label);}
+  for(const name of items)counts.item[name]=(counts.item[name]||0)+1;for(const name of categories)counts.category[name]=(counts.category[name]||0)+1;for(const name of colors)counts.color[name]=(counts.color[name]||0)+1;counts.miniWallet+=+mini;counts.wallet+=+wallet;counts.black+=+black;
+ }
+ const limit=Math.floor(days/2)+1,activeProducts=products.filter(row=>row.status==='selling'||row.status==='restock'||sale.some(month=>month.lineup.some(entry=>entry.skuId===row.id)));
+ const check=(map,label,alternatives)=>{if(alternatives<2)return;for(const [key,count] of Object.entries(map))if(count>=limit)issues.push({level:'要修正',text:`${label}「${label==='SKU'?skuLabel(key):key}」が${count}/${days}日です。テーマ・顧客価値・販売予定と照合し、商品を出さない日や他の適切な候補も検討してください。`});};
+ check(counts.sku,'SKU',activeProducts.length);check(counts.item,'アイテム',new Set(activeProducts.map(row=>row.item)).size);check(counts.category,'商品カテゴリ',new Set(activeProducts.map(row=>row.category)).size);check(counts.color,'色',new Set(activeProducts.map(row=>row.color).filter(Boolean)).size);
+ for(const [id,count] of Object.entries(counts.sku))if(count>=3&&(recent.last10.bySku[id]||0)>=4&&activeProducts.length>1)issues.push({level:'要修正',text:`${skuLabel(id)}は直近10実投稿で${recent.last10.bySku[id]}回、今回も${count}日です。priority・広告候補でも、露出理由と代替候補を確認してください。`});
+ for(const [label,count] of [['mini wallet',counts.miniWallet],['財布',counts.wallet],['黒系',counts.black]])if(count>=limit&&activeProducts.some(row=>!/mini wallet|wallet|財布|black|noir|黒/i.test([row.item,row.category,row.name,row.color].join(' '))))issues.push({level:'要修正',text:`${label}が${count}/${days}日です。商品露出を見直してください。`});
+ const summary=[...Object.entries(counts.sku).sort((a,b)=>b[1]-a[1]).map(([id,count])=>{const row=products.find(product=>product.id===id),lineup=sale.flatMap(month=>month.lineup).find(entry=>entry.skuId===id);return `${skuLabel(id)}：${count}日（直近10投稿${recent.last10.bySku[id]||0}回／20投稿${recent.last20.bySku[id]||0}回、${lineup?.saleKind||'月間販売対象外'}、${row?.status||'状態不明'}${row?.priority?'、優先':''}${row?.adCandidate?'、広告候補':''}）`;}),`mini wallet：${counts.miniWallet}日`,`財布：${counts.wallet}日`,`黒系：${counts.black}日`,...Object.entries(counts.category).map(([name,count])=>`${name}カテゴリ：${count}日`)];
+ return {issues,summary,context:{monthlySale:sale,recent10:recent.last10,recent20:recent.last20,priority:products.filter(row=>row.priority).map(row=>row.id),adCandidates:products.filter(row=>row.adCandidate).map(row=>row.id)}};
+}
+function qualityAudit(plans){const exposure=exposureAudit(plans);return {issues:[...storyQuality(plans),...exposure.issues],exposure};}
 function importPeriod(data){
  const block=salesCycleBlock();
  if(!block||!Array.isArray(data?.plans)||!data.plans.length)throw Error('対象期間の投稿案がありません。');
@@ -37,7 +77,7 @@ function validate(data){
   if(!Array.isArray(p.products)||p.products.some(id=>!sku(id)||sku(id).deleted))throw Error(`${p.date}の商品IDが商品管理にありません。`);
  }
  for(let date=period.from;date<=period.to;date=dayAdd(date,1))if(!blocked(date)&&!seen.has(date))throw Error(`${short(date)}の企画がありません。`);
- return warnings(data.plans);
+ return [...warnings(data.plans),...qualityAudit(data.plans).issues];
 }
 function openImport(){openForm('ChatGPTの10日企画を取り込む','<p>ChatGPTのJSON返答を貼り付けてください。確定前に10日全体をプレビューします。</p><label class="wlabel">JSON<textarea name="json" rows="12" required></textarea></label>',f=>{const data=extract(f.get('json')),warn=validate(data);preview={data,warn,period:importPeriod(data)};showPreview();return false;});}
 function showPreview(){const d=preview.data,group=level=>preview.warn.filter(w=>w.level===level);openForm('10日全体プレビュー',`<p class="tiny muted">投稿可能な${d.plans.length}日分を確認してから確定してください。確定後は編集済み・投稿済みの内容を維持します。</p>`+(['要確認','情報'].map(level=>group(level).length?`<details class="card" ${level==='要確認'?'open':''}><summary>${level} · ${group(level).length}件</summary>${group(level).map(w=>`<p class="tiny">${html(w.text)}</p>`).join('')}</details>`:'').join(''))+d.plans.map(p=>{const topic=OFFICIAL_TOPICS.find(t=>t.id===p.themeId);return `<details class="card editorial-day-preview"><summary>Day${html(Number(cycleDay(p.date).replace(/\D/g,'')))}｜${html(short(p.date))} · ${html(p.format)} · ${html(topic?.group||'')} #${html(topic?.number||'')}</summary><p class="tiny muted">正式テーマ：${html(topic?.title||'未確認')}</p><h3>${html(p.mainTopic)}</h3><p><strong>主目的：</strong>${html(p.primaryPurpose)}</p><p><strong>お客様に届ける価値：</strong>${html(p.customerValue)}</p><p><strong>使用商品：</strong>${html((p.products||[]).map(skuLabel).join(' / ')||'商品なし')}</p><p><strong>メイン本文</strong><br>${html(p.mainPostBody)}</p>${[1,2,3,4].map(n=>`<p><strong>Story ${n}</strong><br>${html(p['story'+n].text)}</p>`).join('')}<p><strong>CTA：</strong>${html(p.CTA||'CTAなし')}</p></details>`;}).join('')+'<p class="tiny muted">以下の「保存する」で確定します。内容と保護対象を確認してください。</p>',()=>applyPreview());}
@@ -47,12 +87,16 @@ showPreview=function(){
   const {period,data}=preview,form=dx('#workForm');
   form.insertAdjacentHTML('afterbegin',`<p class="tiny muted">対象期間：${html(short(period.from))}〜${html(short(period.to))}・Day${period.dayFrom}〜${period.dayFrom+dayDiff(period.to,period.from)}</p>`);
   form.querySelectorAll('.editorial-day-preview summary').forEach((summary,i)=>{summary.textContent=summary.textContent.replace(/^Day\d+/,`Day${data.plans[i].dayNumber}`);});
+  const audit=qualityAudit(data.plans),issues=preview.warn.filter(note=>note.level==='要修正'),panel=`<details class="card" open><summary>商品露出チェック</summary>${audit.exposure.summary.map(line=>`<p class="tiny">${html(line)}</p>`).join('')}<p class="tiny muted">月間販売予定・販売状態・priority・広告候補・直近10/20実投稿の露出を参照。均等ローテーションは行いません。</p></details>${issues.length?`<div class="notice"><strong>要修正 ${issues.length}件：このまま保存できません。ChatGPTで10日全体を再作成してください。</strong>${issues.slice(0,24).map(note=>`<p>${html(note.text)}</p>`).join('')}${issues.length>24?`<p>ほか${issues.length-24}件。繰り返しの多い企画は期間全体で見直してください。</p>`:''}</div>`:''}`;
+  form.querySelector('.editorial-day-preview')?.insertAdjacentHTML('beforebegin',panel);
+  if(issues.length){const save=form.querySelector('.save-foot button');save.disabled=true;save.textContent='要修正・保存できません';}
 };
 function applyPreview(){
   if(!preview)throw Error('プレビューを開き直してください。');
   const period=importPeriod(preview.data);
   if(period.from!==preview.period.from||period.to!==preview.period.to)throw Error('対象期間が変わりました。プレビューを開き直してください。');
-  validate(preview.data);
+  if(validate(preview.data).some(note=>note.level==='要修正'))throw Error('10日全体の内容を修正してから再度取り込んでください。');
+  displayedPeriod=period.from===salesCycleBlock().nextFrom?'next':'current';
   for(const x of preview.data.plans){const old=demo.posts.find(p=>p.date===x.date&&!p.deleted);if(old&&(protectedPost(old)))continue;const topic=OFFICIAL_TOPICS.find(t=>t.id===x.themeId),base=old||{id:newId(),date:x.date,plannedTime:'18:00',actualAt:null,revision:1,manual:false,shots:[],reviewNeeded:[]};Object.assign(base,{format:x.format,primaryAxis:x.primaryPurpose,parentId:x.themeId,topicGroup:topic.group,theme:x.mainTopic,derivedTheme:x.mainTopic,takeaway:x.customerValue,caption:x.mainPostBody,cta:x.CTA||'',skuIds:[...(x.products||[])],stories:[x.story1,x.story2,x.story3,x.story4].map((s,i)=>({...s,slot:i+1,purpose:STORY_ROLES[i],skuIds:s.skuIds||[],storySpecVersion:4})),researchRequired:!!topic.researchRequired,revision:(base.revision||0)+1,manual:false,editorialSource:'chatgpt-import'});if(!old)demo.posts.push(base);}persist();refreshWork();preview=null;
 }
 function copyText(scope){navigator.clipboard.writeText(prompt(scope)).then(()=>toast((scope==='month'?'月間':'10日')+'編集コンテキストをコピーしました'));}
@@ -123,6 +167,8 @@ const originalPrompt=prompt;
 prompt=function(scope){return originalPrompt(scope).replace('返答は説明文を付けずJSONだけにしてください。', `本文は300文字以上。文字数の水増しではなく、cian en paclamの元タンナー・作り手として確認できる素材、仕上げ、工程、構造、実際の使用場面を具体的に扱ってください。一般論だけにせず、疑問→実物で確かめる知識→暮らしでの使い道を投稿ごとに自然につないでください。未確認の経験や商品性能は創作しません。保存記録に根拠がないアンケート結果・質問回答・お客様の声は事実として書かず、記録があっても意味を変えません。顧客反応は判断材料であり毎日強制採用しません。\n\nStory1はメインの要約ではなく別の知識。Story2は自由回答なら質問スタンプ、2〜4択ならアンケートかクイズを選び、直近と同じ質問を避けます。Story3はStory1と別の被写体・学びを示し、商品が主役なら商品紹介、例示だけなら非商品として扱います。Story4はStory3の言い換えや単なる「投稿を見て」ではなく、今日のメイン投稿で具体的に何を確かめられるかを示します。撮影指示は各カットに何を・どう撮る・何を伝えるを含め、Feedは写真、Reelは動画に合わせます。完成後に本文・Story1〜4・撮影を再読し、同じ行動・学び・被写体、根拠のない声、回答形式や商品分類の不一致を解消してください。\n\n返答は説明文を付けずJSONだけにしてください。`);};
 const originalSinglePrompt=singlePrompt;
 singlePrompt=function(post){return originalSinglePrompt(post).replace('返答は説明なしの1日分JSONだけ：', `本文は300文字以上で、その日固有の素材・仕上げ・工程・構造・使う場面を具体的に扱い、一般論の水増しにしないでください。保存された記録に根拠のないアンケート結果・お客様の声を創作しないでください。Story1〜4は同じ行動・学び・被写体を繰り返さず、Story2の選択肢と回答方法、Story3の商品分類、Story4の投稿を見る具体的理由を確認してください。Feedは写真、Reelは動画に合う撮影案を考えてください。\n\n返答は説明なしの1日分JSONだけ：`);};
+const contentPrompt=prompt;
+prompt=function(scope){const text=contentPrompt(scope);if(scope!=='ten-day')return text;return text.replace('返答は説明文を付けずJSONだけにしてください。',`生成前に実投稿・Story履歴、直近10投稿（判断が難しい場合は最大20投稿）の商品露出、月間販売予定、priority・広告候補を読んでください。priority・広告候補は毎日出す指定ではありません。生成中は1日ずつ確定せず、投稿可能な全日を仮作成してください。生成後は全日を再読し、テーマ・問い・結論・学び・被写体・行動・撮影・CTA・SKU・アイテム・カテゴリ・色・財布・mini wallet・黒を横断比較してください。同じ日のStory1〜4、特にStory3とStory4を一つの話の分割にしないでください。Story4はクイズの答え合わせではなく、メイン投稿で何が分かるかを具体的に示してください。クイズには質問、選択肢、正解、同じStory内での回答場所を含め、JSONのkind・text・options・correctAnswer・actionを一致させてください。似た企画や極端な商品偏りが残るならJSONを返さず、差し替えてから出力してください。商品を出さない日も認め、均等ローテーションはしません。\n\n返答は説明文を付けずJSONだけにしてください。`);};
 function nextEditorialContext(){
  const block=salesCycleBlock();if(!block)throw Error('次の期間を計算できません。販売日を確認してください。');
  const from=block.nextFrom,to=block.nextTo,data=context('ten-day'),history=postHistories(from,to);
@@ -142,6 +188,7 @@ function nextEditorialPrompt(){
  return intro+marker+JSON.stringify(data,null,2);
 }
 const planWithNextEditorial=renderPlan;
+let displayedPeriod='current';
 renderPlan=function(){
  planWithNextEditorial();
  const next=dx('#planPeriodCard .next-plan-period');if(!next)return;
@@ -150,12 +197,20 @@ renderPlan=function(){
  const period=salesCycleBlock(),list=dx('#planList');
  const nextPosts=demo.posts.filter(post=>!post.deleted&&post.date>=period.nextFrom&&post.date<=period.nextTo).sort((a,b)=>a.date.localeCompare(b.date));
  if(!list||!nextPosts.length)return;
- list.insertAdjacentHTML('beforeend',`<h3 class="next-plan-list-title">次の期間 ${html(planPeriodLabel(period.nextFrom,period.nextTo,period.nextDayFrom,period.nextDayTo))}</h3>`);
+ const currentCards=[...list.children],currentGroup=document.createElement('div'),nextGroup=document.createElement('div');
+ currentGroup.className=nextGroup.className='stack';
+ currentCards.forEach(card=>currentGroup.append(card));
+ list.append(currentGroup,nextGroup);
  for(let date=period.nextFrom;date<=period.nextTo;date=dayAdd(date,1)){
   const post=nextPosts.find(entry=>entry.date===date),day=`Day${period.nextDayFrom+dayDiff(date,period.nextFrom)}｜${short(date)}`;
-  if(!post){if(blocked(date))list.insertAdjacentHTML('beforeend',`<article class="card blocked-day-card"><span class="badge">${html(day)}</span><h3>投稿不可</h3></article>`);continue;}
-  list.insertAdjacentHTML('beforeend',`<article class="card"><div class="row between"><span class="badge">${html(day)}</span><span class="badge">${post.format==='Reel'?'Reel':'Feed'}</span></div><p class="tiny muted">${html(topicLabel(post))}</p><h3>${html(post.derivedTheme||post.theme)}</h3><p>${html(post.takeaway||'伝えることは未確認')}</p><p class="exact muted">${html(post.skuIds?.length?postLabel(post):post.subjects||'革・工程・道具')}</p><div class="row"><span class="badge">${html(axisShort[post.primaryAxis]||'主目的未確認')}</span><span class="tiny">${post.stories?.length||0} Story · ${(post.shots||[]).reduce((count,shot)=>count+(shot.count||0),0)}カット</span></div>${post.researchRequired?'<p class="notice">要リサーチ</p>':''}<p class="tiny">${post.actualAt?'投稿済み':post.paused?'投稿休止':blocked(date)?'投稿不可日':'予定'}${post.manual?' / 編集済み':''}</p><button class="secondary full" data-work-post="${html(post.id)}">投稿内容を見る・編集</button></article>`);
+  if(!post){if(blocked(date))nextGroup.insertAdjacentHTML('beforeend',`<article class="card blocked-day-card"><span class="badge">${html(day)}</span><h3>投稿不可</h3></article>`);continue;}
+  nextGroup.insertAdjacentHTML('beforeend',`<article class="card"><div class="row between"><span class="badge">${html(day)}</span><span class="badge">${post.format==='Reel'?'Reel':'Feed'}</span></div><p class="tiny muted">${html(topicLabel(post))}</p><h3>${html(post.derivedTheme||post.theme)}</h3><p>${html(post.takeaway||'伝えることは未確認')}</p><p class="exact muted">${html(post.skuIds?.length?postLabel(post):post.subjects||'革・工程・道具')}</p><div class="row"><span class="badge">${html(axisShort[post.primaryAxis]||'主目的未確認')}</span><span class="tiny">${post.stories?.length||0} Story · ${(post.shots||[]).reduce((count,shot)=>count+(shot.count||0),0)}カット</span></div>${post.researchRequired?'<p class="notice">要リサーチ</p>':''}<p class="tiny">${post.actualAt?'投稿済み':post.paused?'投稿休止':blocked(date)?'投稿不可日':'予定'}${post.manual?' / 編集済み':''}</p><button class="secondary full" data-work-post="${html(post.id)}">投稿内容を見る・編集</button></article>`);
  }
+ const switcher=document.createElement('div');switcher.className='actions';switcher.innerHTML=`<button type="button" class="secondary" data-editorial-period="current">現在：${html(short(period.from))}〜${html(short(period.to))}</button><button type="button" class="secondary" data-editorial-period="next">次：${html(short(period.nextFrom))}〜${html(short(period.nextTo))}</button>`;
+ next.after(switcher);
+ const select=target=>{displayedPeriod=target;currentGroup.hidden=target!=='current';nextGroup.hidden=target!=='next';dx('#planAxisSummary').hidden=target==='next';dx('#planDateWork').textContent=target==='next'?planPeriodLabel(period.nextFrom,period.nextTo,period.nextDayFrom,period.nextDayTo):planPeriodLabel(period.from,period.to,period.dayFrom,period.dayTo);switcher.querySelectorAll('button').forEach(button=>button.classList.toggle('active',button.dataset.editorialPeriod===target));};
+ switcher.querySelectorAll('button').forEach(button=>button.onclick=()=>select(button.dataset.editorialPeriod));select(displayedPeriod);
 };
+document.head.insertAdjacentHTML('beforeend','<style>#planList .stack[hidden],#planAxisSummary[hidden]{display:none!important}[data-editorial-period].active{background:#384f3b;color:#fff}</style>');
 window.editorialPlanner={context,prompt,nextContext:nextEditorialContext,nextPrompt:nextEditorialPrompt,extract,validate,warnings,singleContext,singlePrompt,validateSingle,periodReview};refreshWork();
 })();
