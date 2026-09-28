@@ -170,9 +170,14 @@ showPreview=function(){
   const exposureNotes=audit.exposure.issues.filter(note=>note.level==='商品露出要確認');
   const panel=overview+`<details class="card" open><summary>商品露出チェック</summary>${audit.exposure.summary.map(line=>`<p class="tiny">${html(line)}</p>`).join('')}${exposureNotes.map(note=>`<p class="notice">${html(note.text)}</p>`).join('')}${exposureNotes.length?'<label class="pick-name"><input type="checkbox" id="editorialExposureConfirm">繰り返す各日のangle・顧客価値・商品との関連性を確認し、同じ商品の再利用が企画上必要と判断しました</label>':''}<p class="tiny muted">月間販売予定・販売状態・priority・広告候補・直近10/20実投稿の露出を参照。数値だけで一律NGにせず、理由を確認します。</p></details>`+researchPanel+`${issues.length?`<div class="notice"><strong>要修正 ${issues.length}件：このまま保存できません。ChatGPTで10日全体を再作成してください。</strong>${issues.slice(0,24).map(note=>`<p>${html(note.text)}</p>`).join('')}${issues.length>24?`<p>ほか${issues.length-24}件。繰り返しの多い企画は期間全体で見直してください。</p>`:''}</div>`:''}`;
   form.querySelector('.editorial-day-preview')?.insertAdjacentHTML('beforebegin',panel);
-  const save=form.querySelector('.save-foot button'),ready=()=>!issues.length&&(!research.length||preview.researchConfirmed)&&(!exposureNotes.length||preview.exposureConfirmed);save.disabled=!ready();if(issues.length)save.textContent='要修正・保存できません';else if(research.length||exposureNotes.length)save.textContent='確認後に保存';
-  if(research.length)form.querySelector('#editorialResearchConfirm').onchange=event=>{preview.researchConfirmed=event.target.checked;save.disabled=!ready();};
-  if(exposureNotes.length)form.querySelector('#editorialExposureConfirm').onchange=event=>{preview.exposureConfirmed=event.target.checked;save.disabled=!ready();};
+  const save=form.querySelector('.save-foot button'),status=document.createElement('p');status.className='notice';save.before(status);
+  const selectedCount=()=>data.plans.filter(plan=>{const post=demo.posts.find(p=>p.date===plan.date&&!p.deleted),lock=importProtection(post,preview.legacyChoices[plan.date]);return !lock.whole;}).length;
+  const ready=()=>!issues.length&&selectedCount()>0&&(!research.length||preview.researchConfirmed)&&(!exposureNotes.length||preview.exposureConfirmed);
+  const updateSave=()=>{const count=selectedCount();status.textContent=`新案を反映する日：${count}件／${data.plans.length}件。保護する日は旧案を維持します。`;save.disabled=!ready();save.textContent=issues.length?'要修正・保存できません':count===0?'反映する日がありません':research.length||exposureNotes.length?'確認後に保存':'保存する';};
+  form.querySelectorAll('[data-legacy-preserve]').forEach(input=>input.addEventListener('change',updateSave));
+  if(research.length)form.querySelector('#editorialResearchConfirm').onchange=event=>{preview.researchConfirmed=event.target.checked;updateSave();};
+  if(exposureNotes.length)form.querySelector('#editorialExposureConfirm').onchange=event=>{preview.exposureConfirmed=event.target.checked;updateSave();};
+  updateSave();
 };
 function applyPreview(){
   if(!preview)throw Error('プレビューを開き直してください。');
@@ -182,6 +187,9 @@ function applyPreview(){
   if(qualityAudit(preview.data.plans).exposure.issues.some(note=>note.level==='商品露出要確認')&&!preview.exposureConfirmed)throw Error('商品露出の企画理由を確認してください。');
   if(preview.data.plans.some(plan=>{const topic=OFFICIAL_TOPICS.find(entry=>entry.id===plan.themeId);return topic?.number>=66&&topic.number<=80;})&&!preview.researchConfirmed)throw Error('INDUSTRYの出典確認が必要です。');
   for(const plan of preview.data.plans){const old=demo.posts.find(p=>p.date===plan.date&&!p.deleted),seen=preview.revisions[plan.date];if((old?.id||null)!==(seen?.id||null)||(old?.revision||null)!==(seen?.revision||null))throw Error(`${short(plan.date)}の投稿がプレビュー中に変更されました。開き直して確認してください。`);}
+  const eligible=preview.data.plans.filter(plan=>!importProtection(demo.posts.find(p=>p.date===plan.date&&!p.deleted),preview.legacyChoices[plan.date]).whole);
+  if(!eligible.length)throw Error('すべての投稿が保護されています。置き換える項目を明示的に選ぶか、現在の内容を維持してください。');
+  const previousPosts=structuredClone(demo.posts),previousPeriod=displayedPeriod;
   displayedPeriod=period.from===salesCycleBlock().nextFrom?'next':'current';
   for(const x of preview.data.plans){
     const old=demo.posts.find(p=>p.date===x.date&&!p.deleted),lock=importProtection(old,preview.legacyChoices[x.date]);
@@ -194,7 +202,8 @@ function applyPreview(){
     if(!old)demo.posts.push(base);
     if(base.manualFields)base.manualFields.revision=base.revision;
   }
-  persist();refreshWork();preview=null;
+  try{localStorage.setItem(MOCK_KEY,JSON.stringify(demo));}catch(e){demo.posts=previousPosts;displayedPeriod=previousPeriod;throw Error('端末への保存に失敗しました。容量とブラウザの保存設定を確認してください。');}
+  persist();refreshWork();const total=preview.data.plans.length;preview=null;dx('#workDialog').close();toast(`${eligible.length}投稿へ反映しました${eligible.length<total?'。保護対象は旧案を維持しました':''}`);return false;
 }
 function copyText(scope){const selected=scope==='ten-day'&&displayedPeriod==='next'?nextEditorialPrompt():prompt(scope);navigator.clipboard.writeText(selected).then(()=>toast((scope==='month'?'月間':'表示中の期間の')+'編集コンテキストをコピーしました'));}
 const oldPlan=renderPlan;renderPlan=function(){oldPlan();for(const button of document.querySelectorAll('#planList [data-work-post]')){const post=demo.posts.find(p=>p.id===button.dataset.workPost),badge=button.closest('article')?.querySelector('.row.between .badge:last-child');if(post&&badge)badge.textContent=post.format==='Reel'?'Reel':'Feed';}const box=dx('#planPeriodCard .actions');if(box){box.innerHTML='<button class="secondary" id="copyTenEditorial">ChatGPT用10日企画をコピー</button><button class="ghost" id="importTenEditorial">JSONを貼り付ける</button>';dx('#copyTenEditorial').onclick=()=>copyText('ten-day');dx('#importTenEditorial').onclick=openImport;}};
