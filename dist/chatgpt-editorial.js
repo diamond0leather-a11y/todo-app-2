@@ -302,12 +302,20 @@ function nextEditorialContext(){
  data.balance.existing=demo.posts.filter(p=>!p.deleted&&p.date>=from&&p.date<=to).reduce((counts,p)=>(counts[p.primaryAxis]=(counts[p.primaryAxis]||0)+1,counts),{});
  return data;
 }
+function compactNextEditorialContext(data){
+ const {from,to}=data.period;
+ const storySummary=story=>{const sentences=String(story.text||'').split(/(?<=[。！？?])|\n+/u).map(part=>part.trim()).filter(Boolean);return [...new Set([story.question,...sentences.slice(0,1),...sentences.slice(-1)])].filter(Boolean).join(' ');};
+ const plannedRows=data.plannedPosts.posts.map(post=>{const source=demo.posts.find(p=>p.id===post.postId),stories=source?.stories||post.stories||[];return [post.postId,post.date,post.themeId,post.category,post.purpose,post.format,post.products,source?.theme||'',source?.derivedTheme||'',source?.takeaway||'',post.cta||'',!!source?.manual,source?.revision||0,stories.map(story=>[story.slot,story.kind||'',story.theme||'',storySummary(story),story.asset||'',story.action||'',story.materialMode??null,story.skuIds||[]]),source?.shots||[]];});
+ const productRows=data.products.map(product=>[product.id,product.item,product.category,sku(product.id)?.name||'',product.color,product.material,product.status,product.priority,product.adCandidate]);
+ const saleStrategy=data.monthly.saleStrategy.map(sale=>{const month=data.monthly.months[sale.month]||{},extra={...month};delete extra.lineup;delete extra.date;delete extra.time;return {month:sale.month,saleDate:sale.saleDate,time:month.time||'',...extra,lineup:{fields:['skuId','saleKind','priority','adCandidate'],rows:sale.lineup.map(row=>[row.skuId,row.saleKind,row.priority,row.adCandidate])}};});
+ return {...data,plannedPosts:{count:data.plannedPosts.count,fields:['postId','date','themeId','category','purpose','format','products','mainTopic','angle','customerValue','cta','manual','revision','stories','shots'],storyFields:['slot','kind','theme','questionAndLearning','asset','action','materialMode','skuIds'],rows:plannedRows},products:{fields:['skuId','item','category','skuName','color','material','status','priority','adCandidate'],rows:productRows},monthly:{saleStrategy,events:data.monthly.events.filter(event=>event.start<=to&&event.end>=from),ads:data.monthly.ads.filter(ad=>ad.start<=to&&ad.end>=from)}};
+}
 function nextEditorialPrompt(){
  const data=nextEditorialContext(),base=prompt('ten-day'),marker='\n\n編集コンテキスト：\n',split=base.lastIndexOf(marker);
  if(split<0)throw Error('編集コンテキストを作成できません。');
  const first=data.period.days.find(day=>!day.blocked)?.dayNumber||data.period.days[0]?.dayNumber||1;
  const intro=base.slice(0,split).replace('10日分のFeed / Reel / Story1〜4',`${data.period.days.length}日分のFeed / Reel / Story1〜4`).replace(/実投稿履歴：\d+件/,`実投稿履歴：${data.actualHistory.count}件`).replace(/予定投稿：\d+件/,`予定投稿：${data.plannedPosts.count}件`).replace(/"dayNumber":\d+/,`"dayNumber":${first}`);
- return intro+marker+JSON.stringify(data,null,2);
+ return intro.replace('予定投稿：'+data.plannedPosts.count+'件（実績ではありません）。','予定投稿：'+data.plannedPosts.count+'件（実績ではありません）。編集コンテキスト内のplannedPosts・products・monthly.saleStrategyのlineupは、fields/storyFieldsの順にrowsを読む表形式です。')+marker+JSON.stringify(compactNextEditorialContext(data));
 }
 const editorialPromptWithReview=prompt;
 prompt=function(scope){
