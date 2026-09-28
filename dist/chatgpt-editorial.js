@@ -149,7 +149,7 @@ function validate(data){
  for(let date=period.from;date<=period.to;date=dayAdd(date,1))if(!blocked(date)&&!seen.has(date))throw Error(`${short(date)}の企画がありません。`);
  return [...warnings(data.plans),...qualityAudit(data.plans).issues];
 }
-function openImport(){openForm('ChatGPTの10日企画を取り込む','<p>ChatGPTのJSON返答を貼り付けてください。確定前に10日全体をプレビューします。</p><label class="wlabel">JSON<textarea name="json" rows="12" required></textarea></label>',f=>{const data=extract(f.get('json')),warn=validate(data),revisions=Object.fromEntries(data.plans.map(plan=>{const post=demo.posts.find(p=>p.date===plan.date&&!p.deleted);return [plan.date,post?{id:post.id,revision:post.revision}:null];})),legacyChoices={};for(const plan of data.plans){const post=demo.posts.find(p=>p.date===plan.date&&!p.deleted);if(post?.manual&&!post.manualFields&&!post.actualAt&&!post.actualSnapshot)legacyChoices[plan.date]={meta:true,caption:true,stories:[true,true,true,true]};}preview={data,warn,period:importPeriod(data),revisions,legacyChoices,researchConfirmed:false};showPreview();return false;});}
+function openImport(){if(previewSaving)return;openForm('ChatGPTの10日企画を取り込む','<p>ChatGPTのJSON返答を貼り付けてください。確定前に10日全体をプレビューします。</p><label class="wlabel">JSON<textarea name="json" rows="12" required></textarea></label>',f=>{const data=extract(f.get('json')),warn=validate(data),revisions=Object.fromEntries(data.plans.map(plan=>{const post=demo.posts.find(p=>p.date===plan.date&&!p.deleted);return [plan.date,post?{id:post.id,revision:post.revision}:null];})),legacyChoices={};for(const plan of data.plans){const post=demo.posts.find(p=>p.date===plan.date&&!p.deleted);if(post?.manual&&!post.manualFields&&!post.actualAt&&!post.actualSnapshot)legacyChoices[plan.date]={meta:true,caption:true,stories:[true,true,true,true]};}preview={data,warn,period:importPeriod(data),revisions,legacyChoices,researchConfirmed:false};showPreview();return false;});}
 function showPreview(){const d=preview.data,group=level=>preview.warn.filter(w=>w.level===level);openForm('10日全体プレビュー',`<p class="tiny muted">投稿可能な${d.plans.length}日分を確認してから確定してください。確定後は編集済み・投稿済みの内容を維持します。</p>`+(['要確認','情報'].map(level=>group(level).length?`<details class="card" ${level==='要確認'?'open':''}><summary>${level} · ${group(level).length}件</summary>${group(level).map(w=>`<p class="tiny">${html(w.text)}</p>`).join('')}</details>`:'').join(''))+d.plans.map(p=>{const topic=OFFICIAL_TOPICS.find(t=>t.id===p.themeId);return `<details class="card editorial-day-preview"><summary>Day${html(Number(cycleDay(p.date).replace(/\D/g,'')))}｜${html(short(p.date))} · ${html(p.format)} · ${html(topic?.group||'')} #${html(topic?.number||'')}</summary><p class="tiny muted">正式テーマ：${html(topic?.title||'未確認')}</p><h3>${html(p.mainTopic)}</h3><p><strong>主目的：</strong>${html(p.primaryPurpose)}</p><p><strong>お客様に届ける価値：</strong>${html(p.customerValue)}</p><p><strong>使用商品：</strong>${html((p.products||[]).map(skuLabel).join(' / ')||'商品なし')}</p><p><strong>メイン本文</strong><br>${html(p.mainPostBody)}</p>${[1,2,3,4].map(n=>`<p><strong>Story ${n}</strong><br>${html(p['story'+n].text)}</p>`).join('')}<p><strong>CTA：</strong>${html(p.CTA||'CTAなし')}</p></details>`;}).join('')+'<p class="tiny muted">以下の「保存する」で確定します。内容と保護対象を確認してください。</p>',()=>applyPreview());}
 const renderPeriodPreview=showPreview;
 showPreview=function(){
@@ -179,32 +179,45 @@ showPreview=function(){
   if(exposureNotes.length)form.querySelector('#editorialExposureConfirm').onchange=event=>{preview.exposureConfirmed=event.target.checked;updateSave();};
   updateSave();
 };
+let previewSaving=false;
+const previewDialog=dx('#workDialog'),previewClose=previewDialog.querySelector('[data-work-close]');
+previewDialog.addEventListener('cancel',event=>{if(previewSaving)event.preventDefault();});
 function applyPreview(){
-  if(!preview)throw Error('プレビューを開き直してください。');
-  const period=importPeriod(preview.data);
-  if(period.from!==preview.period.from||period.to!==preview.period.to)throw Error('対象期間が変わりました。プレビューを開き直してください。');
-  if(validate(preview.data).some(note=>note.level==='要修正'))throw Error('10日全体の内容を修正してから再度取り込んでください。');
-  if(qualityAudit(preview.data.plans).exposure.issues.some(note=>note.level==='商品露出要確認')&&!preview.exposureConfirmed)throw Error('商品露出の企画理由を確認してください。');
-  if(preview.data.plans.some(plan=>{const topic=OFFICIAL_TOPICS.find(entry=>entry.id===plan.themeId);return topic?.number>=66&&topic.number<=80;})&&!preview.researchConfirmed)throw Error('INDUSTRYの出典確認が必要です。');
-  for(const plan of preview.data.plans){const old=demo.posts.find(p=>p.date===plan.date&&!p.deleted),seen=preview.revisions[plan.date];if((old?.id||null)!==(seen?.id||null)||(old?.revision||null)!==(seen?.revision||null))throw Error(`${short(plan.date)}の投稿がプレビュー中に変更されました。開き直して確認してください。`);}
-  const eligible=preview.data.plans.filter(plan=>!importProtection(demo.posts.find(p=>p.date===plan.date&&!p.deleted),preview.legacyChoices[plan.date]).whole);
+  if(previewSaving)return false;
+  const target=preview,form=dx('#workForm'),button=form.querySelector('.save-foot button'),controls=[...form.querySelectorAll('input,textarea,select')].map(input=>[input,input.disabled]);
+  previewSaving=true;previewClose.disabled=true;for(const [input] of controls)input.disabled=true;button.disabled=true;button.textContent='共有データへ保存中…';form.querySelector('#workError').textContent='';
+  savePreview(target).catch(error=>{preview=target;form.querySelector('#workError').textContent=target?.localApplied?(error.message==='sync-conflict'?'別端末の変更と競合しました。内容を確認し、再読み込み前に共有保存を再試行してください。':'共有保存が完了していません。接続を確認し、再読み込み前に共有保存を再試行してください。'):error.message;}).finally(()=>{previewSaving=false;previewClose.disabled=false;for(const [input,disabled] of controls)input.disabled=disabled;button.disabled=false;button.textContent=target?.localApplied?'共有保存を再試行':'保存する';});
+  return false;
+}
+async function savePreview(target){
+  if(!target)throw Error('プレビューを開き直してください。');
+  if(target.localApplied){persist();await window.todo2SyncBridge.flush();finishPreview(target);return;}
+  const period=importPeriod(target.data);
+  if(period.from!==target.period.from||period.to!==target.period.to)throw Error('対象期間が変わりました。プレビューを開き直してください。');
+  if(validate(target.data).some(note=>note.level==='要修正'))throw Error('10日全体の内容を修正してから再度取り込んでください。');
+  if(qualityAudit(target.data.plans).exposure.issues.some(note=>note.level==='商品露出要確認')&&!target.exposureConfirmed)throw Error('商品露出の企画理由を確認してください。');
+  if(target.data.plans.some(plan=>{const topic=OFFICIAL_TOPICS.find(entry=>entry.id===plan.themeId);return topic?.number>=66&&topic.number<=80;})&&!target.researchConfirmed)throw Error('INDUSTRYの出典確認が必要です。');
+  for(const plan of target.data.plans){const old=demo.posts.find(p=>p.date===plan.date&&!p.deleted),seen=target.revisions[plan.date];if((old?.id||null)!==(seen?.id||null)||(old?.revision||null)!==(seen?.revision||null))throw Error(`${short(plan.date)}の投稿がプレビュー中に変更されました。開き直して確認してください。`);}
+  const eligible=target.data.plans.filter(plan=>!importProtection(demo.posts.find(p=>p.date===plan.date&&!p.deleted),target.legacyChoices[plan.date]).whole);
   if(!eligible.length)throw Error('すべての投稿が保護されています。置き換える項目を明示的に選ぶか、現在の内容を維持してください。');
   const previousPosts=structuredClone(demo.posts),previousPeriod=displayedPeriod;
   displayedPeriod=period.from===salesCycleBlock().nextFrom?'next':'current';
-  for(const x of preview.data.plans){
-    const old=demo.posts.find(p=>p.date===x.date&&!p.deleted),lock=importProtection(old,preview.legacyChoices[x.date]);
+  for(const x of target.data.plans){
+    const old=demo.posts.find(p=>p.date===x.date&&!p.deleted),lock=importProtection(old,target.legacyChoices[x.date]);
     if(lock.whole)continue;
     const topic=OFFICIAL_TOPICS.find(t=>t.id===x.themeId),base=old||{id:newId(),date:x.date,plannedTime:'18:00',actualAt:null,revision:0,manual:false,shots:[],reviewNeeded:[]};
     const stories=[x.story1,x.story2,x.story3,x.story4].map((story,i)=>lock.stories[i]?base.stories[i]:({...story,slot:i+1,purpose:STORY_ROLES[i],skuIds:story.skuIds||[],storySpecVersion:4}));
-    if(!lock.meta)Object.assign(base,{format:x.format,primaryAxis:x.primaryPurpose,parentId:x.themeId,topicGroup:topic.group,theme:x.mainTopic,derivedTheme:x.mainTopic,takeaway:x.customerValue,cta:x.CTA||'',skuIds:[...(x.products||[])],researchRequired:!!topic.researchRequired,researchSources:x.researchSources||[],researchVerified:topic.number>=66&&topic.number<=80?preview.researchConfirmed:false});
+    if(!lock.meta)Object.assign(base,{format:x.format,primaryAxis:x.primaryPurpose,parentId:x.themeId,topicGroup:topic.group,theme:x.mainTopic,derivedTheme:x.mainTopic,takeaway:x.customerValue,cta:x.CTA||'',skuIds:[...(x.products||[])],researchRequired:!!topic.researchRequired,researchSources:x.researchSources||[],researchVerified:topic.number>=66&&topic.number<=80?target.researchConfirmed:false});
     Object.assign(base,{caption:lock.caption?base.caption:x.mainPostBody,stories,revision:(base.revision||0)+1,editorialSource:'chatgpt-import'});
     if(!lock.meta){const protectedShotIds=new Set(stories.filter((_,i)=>lock.stories[i]).map(story=>story.shotId).filter(Boolean));base.shots=[...x.shots.map((shot,i)=>({...shot,id:base.id+'-editorial-shot-'+(i+1),signature:[base.id,'editorial',i,shot.media,shot.what,...shot.skuIds].join('|')})),...(old?.shots||[]).filter(shot=>protectedShotIds.has(shot.id))];}
     if(!old)demo.posts.push(base);
     if(base.manualFields)base.manualFields.revision=base.revision;
   }
   try{localStorage.setItem(MOCK_KEY,JSON.stringify(demo));}catch(e){demo.posts=previousPosts;displayedPeriod=previousPeriod;throw Error('端末への保存に失敗しました。容量とブラウザの保存設定を確認してください。');}
-  persist();refreshWork();const total=preview.data.plans.length;preview=null;dx('#workDialog').close();toast(`${eligible.length}投稿へ反映しました${eligible.length<total?'。保護対象は旧案を維持しました':''}`);return false;
+  target.localApplied={count:eligible.length,total:target.data.plans.length};persist();
+  await window.todo2SyncBridge.flush();finishPreview(target);
 }
+function finishPreview(target){const {count,total}=target.localApplied;refreshWork();preview=null;previewDialog.close();toast(`${count}投稿へ反映しました${count<total?'。保護対象は旧案を維持しました':''}`);}
 function copyText(scope){const selected=scope==='ten-day'&&displayedPeriod==='next'?nextEditorialPrompt():prompt(scope);navigator.clipboard.writeText(selected).then(()=>toast((scope==='month'?'月間':'表示中の期間の')+'編集コンテキストをコピーしました'));}
 const oldPlan=renderPlan;renderPlan=function(){oldPlan();for(const button of document.querySelectorAll('#planList [data-work-post]')){const post=demo.posts.find(p=>p.id===button.dataset.workPost),badge=button.closest('article')?.querySelector('.row.between .badge:last-child');if(post&&badge)badge.textContent=post.format==='Reel'?'Reel':'Feed';}const box=dx('#planPeriodCard .actions');if(box){box.innerHTML='<button class="secondary" id="copyTenEditorial">ChatGPT用10日企画をコピー</button><button class="ghost" id="importTenEditorial">JSONを貼り付ける</button>';dx('#copyTenEditorial').onclick=()=>copyText('ten-day');dx('#importTenEditorial').onclick=openImport;}};
 const oldMonth=renderMonthWork;renderMonthWork=function(){oldMonth();const head=dx('#view-month > .row');if(head&&!dx('#copyMonthEditorial'))head.insertAdjacentHTML('afterend','<article class="card"><h3>月間編集計画</h3><p>販売・商品・履歴・反応をまとめてChatGPTへ渡します。</p><button class="secondary full" id="copyMonthEditorial">ChatGPT用月間コンテキストをコピー</button></article>');dx('#copyMonthEditorial')?.addEventListener('click',()=>copyText('month'),{once:true});};

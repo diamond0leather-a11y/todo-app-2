@@ -4,7 +4,7 @@ const root=path.join(__dirname,'dist');
 const inline=[...fs.readFileSync(path.join(root,'index.html'),'utf8').matchAll(/<script>([\s\S]*?)<\/script>/g)];inline.forEach((entry,index)=>new vm.Script(entry[1],{filename:`inline-${index}.js`}));assert(inline.length>=8);
 // Isolate import persistence/protection from editorial prose scoring; separate quality QA covers that scorer.
 // Firebase is stubbed: this test never opens a production workspace.
-const server=http.createServer((req,res)=>{const name=decodeURIComponent(req.url.split('?')[0]).replace(/^\//,'')||'index.html';if(name==='firebase-sync.js'){res.writeHead(200,{'Content-Type':'text/javascript'});res.end('');return;}const file=path.resolve(root,name);if(!file.startsWith(root+path.sep)){res.writeHead(403);res.end();return;}try{res.writeHead(200,{'Content-Type':name.endsWith('.js')?'text/javascript':'text/html'});let body=fs.readFileSync(file,'utf8');if(name==='chatgpt-editorial.js')body=body.replace('function qualityAudit(plans){','function qualityAudit(plans){return {issues:[],exposure:{issues:[],summary:[]}};}function fullQualityAudit(plans){');res.end(body);}catch{res.writeHead(404);res.end();}});
+const server=http.createServer((req,res)=>{const name=decodeURIComponent(req.url.split('?')[0]).replace(/^\//,'')||'index.html';if(name==='firebase-sync.js'){res.writeHead(200,{'Content-Type':'text/javascript'});res.end('window.todo2SyncBridge.flush=async()=>{};');return;}const file=path.resolve(root,name);if(!file.startsWith(root+path.sep)){res.writeHead(403);res.end();return;}try{res.writeHead(200,{'Content-Type':name.endsWith('.js')?'text/javascript':'text/html'});let body=fs.readFileSync(file,'utf8');if(name==='chatgpt-editorial.js')body=body.replace('function qualityAudit(plans){','function qualityAudit(plans){return {issues:[],exposure:{issues:[],summary:[]}};}function fullQualityAudit(plans){').replace('window.editorialPlanner={','window.__qaPreview=()=>preview;window.editorialPlanner={');res.end(body);}catch{res.writeHead(404);res.end();}});
 const run=async()=>{await new Promise(resolve=>server.listen(0,'127.0.0.1',resolve));const browser=await chromium.launch({channel:'msedge',headless:true});try{const page=await browser.newPage({viewport:{width:390,height:844}}),errors=[];page.on('pageerror',error=>errors.push(error.message));page.on('console',message=>{if(message.type()==='error'&&!message.text().includes('favicon.ico'))errors.push(message.text());});await page.goto(`http://127.0.0.1:${server.address().port}/`);const setup=await page.evaluate(()=>{
   const from='2026-10-05',plans=[];
   const words=['植物タンニン','繊維','染色','裁断','縫製','コバ','金具','収納','経年','保管'];
@@ -25,6 +25,7 @@ const run=async()=>{await new Promise(resolve=>server.listen(0,'127.0.0.1',resol
  assert.equal(await page.evaluate(()=>document.documentElement.scrollWidth<=window.innerWidth),true);
  const saveState=await page.evaluate(()=>({disabled:document.querySelector('#workForm .save-foot button').disabled,alerts:[...document.querySelectorAll('#workForm .notice')].map(x=>x.textContent)}));assert.equal(saveState.disabled,false,JSON.stringify(saveState));
  await page.locator('#workForm .save-foot button').click();
+ await page.locator('#workDialog').waitFor({state:'hidden'});
  const after=await page.evaluate(()=>({plans:demo.posts.filter(p=>p.date>='2026-10-05'&&p.date<='2026-10-14').map(p=>({date:p.date,theme:p.theme,caption:p.caption,stories:p.stories.map(s=>s.text),products:p.skuIds})),titles:[...document.querySelectorAll('#planList [data-editorial-period],#planList h3')].map(x=>x.textContent),stored:JSON.parse(localStorage.getItem(MOCK_KEY)).posts.filter(p=>p.date>='2026-10-05'&&p.date<='2026-10-14').map(p=>({date:p.date,theme:p.theme}))}));
  assert.equal(after.plans.length,10);for(const plan of setup.plans){const p=after.plans.find(x=>x.date===plan.date);assert.equal(p.theme,plan.mainTopic);assert.equal(p.caption,plan.mainPostBody);assert.deepEqual(p.stories,[1,2,3,4].map(n=>plan['story'+n].text));assert.deepEqual(p.products,plan.products);assert.equal(after.stored.find(x=>x.date===plan.date).theme,plan.mainTopic);}
  const rendered=await page.evaluate(()=>({active:document.querySelector('[data-editorial-period=next]')?.classList.contains('active'),titles:[...document.querySelectorAll('#planList .stack:not([hidden]) article h3')].map(node=>node.textContent)}));assert.equal(rendered.active,true);assert.deepEqual(rendered.titles,setup.plans.map(p=>p.mainTopic));
@@ -36,15 +37,18 @@ const run=async()=>{await new Promise(resolve=>server.listen(0,'127.0.0.1',resol
  await page.locator('[data-legacy-preserve]').evaluateAll(inputs=>inputs.forEach(input=>{input.checked=false;input.dispatchEvent(new Event('change',{bubbles:true}));}));
  assert.equal(await page.locator('#workForm .save-foot button').isDisabled(),false);
  await page.locator('#workForm .save-foot button').click();
+ await page.locator('#workDialog').waitFor({state:'hidden'});
  const explicit=await page.evaluate(()=>demo.posts.filter(p=>p.date>='2026-10-05'&&p.date<='2026-10-14').map(p=>p.theme));assert.deepEqual(explicit,setup.plans.map(p=>p.mainTopic));
  await page.evaluate(()=>{for(const p of demo.posts.filter(p=>p.date>='2026-10-05'&&p.date<='2026-10-14'))p.manual=false;const p=demo.posts.find(p=>p.date==='2026-10-05');p.theme='投稿済みの内容';p.actualAt='2026-10-05T18:00:00+09:00';p.actualSnapshot={theme:p.theme};persist();go('plan');document.querySelector('#importTenEditorial').click();});
  await page.evaluate(plans=>{document.querySelector('[name=json]').value=JSON.stringify({schema:'cian-editorial-v1',scope:'ten-day',plans});document.querySelector('#workForm').requestSubmit();},setup.plans);
  assert((await page.locator('#workForm').textContent()).includes('新案を反映する日：9件／10件'));
  await page.locator('#workForm .save-foot button').click();
+ await page.locator('#workDialog').waitFor({state:'hidden'});
  assert.equal(await page.evaluate(()=>demo.posts.find(p=>p.date==='2026-10-05').theme),'投稿済みの内容');
  await page.evaluate(()=>{const p=demo.posts.find(p=>p.date==='2026-10-07');p.manual=true;p.caption='手動編集した本文';p.stories[0].text='手動編集したStory1';p.stories[0].manual=true;p.manualFields={caption:true,stories:[true,false,false,false],revision:p.revision};persist();go('plan');document.querySelector('#importTenEditorial').click();});
  await page.evaluate(plans=>{document.querySelector('[name=json]').value=JSON.stringify({schema:'cian-editorial-v1',scope:'ten-day',plans});document.querySelector('#workForm').requestSubmit();},setup.plans);
  await page.locator('#workForm .save-foot button').click();
+ await page.locator('#workDialog').waitFor({state:'hidden'});
  const manual=await page.evaluate(()=>{const p=demo.posts.find(p=>p.date==='2026-10-07');return {caption:p.caption,story1:p.stories[0].text,story2:p.stories[1].text};});assert.deepEqual(manual,{caption:'手動編集した本文',story1:'手動編集したStory1',story2:setup.plans[2].story2.text});
  await page.evaluate(()=>{const p=demo.posts.find(p=>p.date==='2026-09-27');p.actualAt=new Date(Date.now()-24*60*60*1000).toISOString();p.actualSnapshot={...p};const task=allTasks().find(t=>t.p.id===p.id&&t.stage==='24h');demo.records[task.key]={postId:p.id,stage:'24h',observedAt:jstInput(),views:0,reach:null,commentContents:['保存済みコメント'],voices:['保存済み質問'],meaning:{CUSTOMER_VALUE:'保存済みの気づき'}};editRecord(task.key);});
  const review=await page.evaluate(()=>{const form=document.querySelector('#workForm'),optional=[...form.querySelectorAll('details')].find(x=>x.querySelector('summary')?.textContent.includes('反応・メモを追加'));return {numbers:form.querySelectorAll('input[type=number]').length,optionalClosed:!optional.open,axes:[...optional.querySelectorAll('[name^="meaning-"]')].length,comment:!!optional.querySelector('[name=commentContents]'),voices:!!optional.querySelector('[name=voices]'),timeVisible:!form.querySelector('[name=observedAt]').closest('details')};});
@@ -53,12 +57,34 @@ const run=async()=>{await new Promise(resolve=>server.listen(0,'127.0.0.1',resol
  await page.locator('#workForm').evaluate(form=>form.requestSubmit());
  const reviewSaved=await page.evaluate(()=>{const p=demo.posts.find(p=>p.date==='2026-09-27'),r=demo.records[p.id+'|24h'];editRecord(p.id+'|7d');return {views:r.views,reach:r.reach,comment:r.commentContents[0],voice:r.voices[0],meaning:r.meaning.CUSTOMER_VALUE,sevenAxis:!!document.querySelector('#workForm [name="meaning-CUSTOMER_VALUE"]')};});
  assert.deepEqual(reviewSaved,{views:0,reach:null,comment:'保存済みコメント',voice:'保存済み質問',meaning:'保存済みの気づき',sevenAxis:true});
- await page.evaluate(()=>{document.querySelector('#workDialog').close();const p=demo.posts.find(p=>p.date==='2026-10-06');p.theme='保存失敗前の企画';persist();go('plan');document.querySelector('#importTenEditorial').click();});
+ await page.evaluate(()=>{document.querySelector('#workDialog').close();const p=demo.posts.find(p=>p.date==='2026-10-06');p.theme='保存失敗前の企画';const legacy=demo.posts.find(p=>p.date==='2026-10-08');legacy.manual=true;delete legacy.manualFields;persist();go('plan');document.querySelector('#importTenEditorial').click();});
  await page.evaluate(plans=>{document.querySelector('[name=json]').value=JSON.stringify({schema:'cian-editorial-v1',scope:'ten-day',plans});document.querySelector('#workForm').requestSubmit();window.__originalSetItem=Storage.prototype.setItem;Storage.prototype.setItem=function(){throw Error('quota');};},setup.plans);
  await page.locator('#workForm .save-foot button').click();
+ await page.locator('#workError').filter({hasText:'端末への保存に失敗'}).waitFor();
  assert((await page.locator('#workError').textContent()).includes('端末への保存に失敗'));
  assert.equal(await page.evaluate(()=>demo.posts.find(p=>p.date==='2026-10-06').theme),'保存失敗前の企画');
  await page.evaluate(()=>{Storage.prototype.setItem=window.__originalSetItem;});
+ await page.evaluate(()=>{window.__realFlush=window.todo2SyncBridge.flush;window.__previewA=window.__qaPreview();window.todo2SyncBridge.flush=()=>new Promise((resolve,reject)=>{window.__resolveFlush=resolve;window.__rejectFlush=reject;});});
+ await page.locator('#workForm .save-foot button').click();
+ assert.equal(await page.locator('#workDialog [data-work-close]').isDisabled(),true,'saving must disable ×');
+ assert.equal(await page.locator('#workForm [data-legacy-preserve]').first().isDisabled(),true,'saving must freeze replacement choices');
+ await page.keyboard.press('Escape');
+ const during=await page.evaluate(()=>{document.querySelector('#workDialog [data-work-close]').click();document.querySelector('#importTenEditorial').click();return {open:document.querySelector('#workDialog').open,title:document.querySelector('#workTitle').textContent,samePreview:window.__qaPreview()===window.__previewA};});
+ assert.deepEqual(during,{open:true,title:'10日全体プレビュー',samePreview:true},'saving must not close A or open B');
+ await page.evaluate(()=>window.__rejectFlush(Error('mock-offline')));
+ await page.locator('#workError').filter({hasText:'共有保存が完了していません'}).waitFor();
+ assert.equal(await page.locator('#workDialog').evaluate(dialog=>dialog.open),true,'shared failure must keep preview open');
+ assert.equal(await page.locator('#workForm .save-foot button').textContent(),'共有保存を再試行');
+ assert.equal(await page.evaluate(()=>window.__qaPreview()===window.__previewA),true,'failed save must retain A');
+ assert.equal(await page.locator('#workDialog [data-work-close]').isDisabled(),false,'× must recover after failure');
+ assert.equal(await page.locator('#workForm [data-legacy-preserve]').first().isDisabled(),false,'choices must recover after failure');
+ await page.locator('#workForm .save-foot button').click();
+ assert.equal(await page.locator('#workDialog [data-work-close]').isDisabled(),true);
+ await page.evaluate(()=>{document.querySelector('#importTenEditorial').click();window.__resolveFlush();});
+ await page.locator('#workDialog').waitFor({state:'hidden'});
+ await page.evaluate(()=>{window.todo2SyncBridge.flush=window.__realFlush;document.querySelector('#importTenEditorial').click();});
+ assert.equal(await page.locator('#workTitle').textContent(),'ChatGPTの10日企画を取り込む','normal import must recover after success');
+ await page.evaluate(()=>document.querySelector('#workDialog').close());
  const analysis=await page.evaluate(()=>{const sample=analysisSchema();sample.batchId='qa-editorial-regression';sample.proposals=[];const accepted=['伸ばす','継続','改善','次回検証'].every(category=>{sample.experiments[0].category=category;try{validateImport(JSON.stringify(sample));return true;}catch{return false;}});sample.experiments[0].category='BUSINESS';let rejected=false;try{validateImport(JSON.stringify(sample));}catch(error){rejected=error.message.includes('category');}return {schema:sample.schema,accepted,rejected};});
  assert.deepEqual(analysis,{schema:2,accepted:true,rejected:true});
  assert.deepEqual(errors,[]);console.log('PASS ten-day preview/save/storage/reload and protected no-op guard',reloaded.data.length);
