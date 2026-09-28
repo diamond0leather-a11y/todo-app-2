@@ -321,7 +321,11 @@ const editorialPromptWithReview=prompt;
 prompt=function(scope){
  const text=editorialPromptWithReview(scope);
  if(scope!=='ten-day')return text;
- return text.replace('商品候補は monthly.saleStrategy', 'レビューは reviews.primary7d の「7d・期間内・数値取得済み」を主要評価として読み、reviews.provisional24h は暫定評価、reviews.reference の早期取得・遅延取得は参考値として別扱いにしてください。reviews.pending7d は7d未完了、reviews.evaluationHold7d は評価期間未到達です。24hのみの取得、missed、7d未入力、早期・遅延の7dを7d期間内の最終評価とみなさないでください。数値の0は取得済みのゼロ、null・未記録は未取得です。\n\n商品候補は monthly.saleStrategy');
+ const reviewText=text.replace('商品候補は monthly.saleStrategy', 'レビューは reviews.primary7d の「7d・期間内・数値取得済み」を主要評価として読み、reviews.provisional24h は暫定評価、reviews.reference の早期取得・遅延取得は参考値として別扱いにしてください。reviews.pending7d は7d未完了、reviews.evaluationHold7d は評価期間未到達です。24hのみの取得、missed、7d未入力、早期・遅延の7dを7d期間内の最終評価とみなさないでください。数値の0は取得済みのゼロ、null・未記録は未取得です。\n\n商品候補は monthly.saleStrategy');
+ const storyGuide=`Story2をアンケート／二択にする場合、textは回答できる質問、actionは空でない回答方法、kindは「アンケート」または「二択」、optionsは空でない文字列2〜4個の配列にしてください。選択肢をactionの文章中だけに書かず、必ずoptions配列へ構造化してください。例（plan内のstory2）：{"text":"工房の工程で、近くから見てみたいのはどちらですか？","action":"アンケートで回答する","kind":"アンケート","options":["革を薄くする工程","革を縫う工程"],"asset":"具体的な撮影素材","materialMode":"まとめ撮り対象","skuIds":[]}。
+Story2をクイズにする場合、textは回答できる質問、actionは空でない回答方法、kindは「クイズ」、optionsは空でない文字列2個以上、correctAnswerは空でない正解、answerLocationは同じStory内で答え合わせすることが明確な値にしてください。回答場所はactionの文言だけに頼らずanswerLocationへ明示し、Story4へ持ち越さないでください。例（plan内のstory2）：{"text":"この型紙は何をするための道具でしょう？","action":"選択肢から回答する","kind":"クイズ","options":["革を切る形の目印","革を磨く","色を塗る"],"correctAnswer":"革を切る形の目印","answerLocation":"同じStory内","asset":"裁断用の型紙を真上から撮った写真","materialMode":"過去素材使用可","skuIds":[]}。
+Story3とStory4を同じ企画の前編・後編にせず、Story4をStory2/3の「答え」「正解」の答え合わせにしないでください。Story4はその日のメイン投稿を見る独立した具体的な導線とし、単独で読んでも役割が成立する内容にしてください。Story3とStory4のtext/action/theme/whatで問い・学び・被写体・行動が過度に類似しないよう、JSON出力前に確認してください。`;
+ return reviewText.replace('\n\n編集コンテキスト：\n',`\n\n${storyGuide}\n\n編集コンテキスト：\n`);
 };
 const planWithNextEditorial=renderPlan;
 let displayedPeriod='current';
