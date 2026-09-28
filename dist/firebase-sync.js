@@ -102,8 +102,20 @@ function submitQueued(){
  saveQueue=saveQueue.catch(()=>{}).then(()=>saveState(state,new Map(localBaseline),generation)).finally(()=>{if(generation!==authGeneration)return;pendingWrites--;applyRemoteSoon();});
  return saveQueue;
 }
-window.addEventListener('todo2:local-save',event=>{if(!currentUser||!initialized||applyingRemote)return;if(writeTimer)clearTimeout(writeTimer);else pendingWrites++;queuedState=event.detail.state;queuedGeneration=authGeneration;writeTimer=setTimeout(()=>{submitQueued().catch(()=>{});},600);});
-window.todo2SyncBridge.flush=()=>{if(!currentUser||!initialized)throw Error('共有データへ接続できません。ログインと接続を確認してください。');return submitQueued();};
+function queueLocalSave(state){if(writeTimer)clearTimeout(writeTimer);else pendingWrites++;queuedState=clean(state);queuedGeneration=authGeneration;writeTimer=setTimeout(()=>{submitQueued().catch(()=>{});},600);}
+window.addEventListener('todo2:local-save',event=>{if(!currentUser||!initialized||applyingRemote)return;queueLocalSave(event.detail.state);});
+window.todo2SyncBridge.flush=async(state,postIds=[])=>{
+ if(!currentUser||!initialized)throw Error('共有データへ接続できません。ログインと接続を確認してください。');
+ if(state)queueLocalSave(state);await submitQueued();
+ if(!state||!postIds.length)return;
+ const expected=new Map((state.posts||[]).map(post=>[post.id,post]));
+ try{for(const id of postIds){const post=expected.get(id),key='posts/'+safeId(id),snap=await getDoc(doc(workspace,'posts',safeId(id))),actual=snap.exists()?snap.data():null;
+  if(!post||!actual||actual.deleted||!same(actual.value,post)){
+   if(actual){remoteDocs.set(key,{...actual,updatedAt:undefined,updatedBy:undefined});localBaseline.set(key,clean(actual));}else{remoteDocs.delete(key);localBaseline.delete(key);}
+   throw Error('shared-save-not-confirmed');
+  }
+ }}catch(error){writeFailed=true;status('共有データへの保存を確認できませんでした。再試行してください。',true);throw error;}
+};
 document.addEventListener('close',()=>applyRemoteSoon(),true);
 
 installUI();await setPersistence(auth,browserLocalPersistence);onAuthStateChanged(auth,async user=>{

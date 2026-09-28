@@ -1,0 +1,71 @@
+// End-to-end editorial import with the real firebase-sync.js against an in-browser Firestore stub.
+// No request is sent to the production Firebase project.
+const fs=require('fs'),http=require('http'),path=require('path'),assert=require('assert');
+const {chromium}=require('playwright');
+const root=path.join(__dirname,'dist');
+const shim=`
+const QA_REMOTE='__qa_firestore_docs',QA_WORKSPACE='workspaces/cian-en-paclam';
+const qaListeners=new Map(),qaRead=()=>JSON.parse(localStorage.getItem(QA_REMOTE)||'{}'),qaStore=data=>localStorage.setItem(QA_REMOTE,JSON.stringify(data));
+const qaRef=(base,...parts)=>({path:[base?.path,...parts].filter(Boolean).join('/')});
+const qaSnap=data=>({exists:()=>data!==undefined,data:()=>structuredClone(data)});
+function qaSeed(){const data=qaRead();if(data[QA_WORKSPACE])return;for(const [key,value] of window.__qaSplitState(window.todo2SyncBridge.read()))data[QA_WORKSPACE+'/'+key]={...value,version:1};data[QA_WORKSPACE]={initialized:true,schemaVersion:1};qaStore(data);}
+function qaDocs(ref){qaSeed();const prefix=ref.path+'/';return Object.entries(qaRead()).filter(([key])=>key.startsWith(prefix)&&!key.slice(prefix.length).includes('/')).sort(([a],[b])=>a.localeCompare(b)).map(([key,value])=>({id:key.slice(prefix.length),data:()=>structuredClone(value)}));}
+function qaWrite(ref,value){if(window.__qaFailPostId&&ref.path.endsWith('/posts/'+window.__qaFailPostId))throw Error('mock-firestore-failure');const data=qaRead();data[ref.path]=structuredClone(value);qaStore(data);const parent=ref.path.slice(0,ref.path.lastIndexOf('/')),listener=qaListeners.get(parent);if(listener)queueMicrotask(()=>listener({docChanges:()=>[{type:'modified',doc:{id:ref.path.split('/').at(-1),data:()=>structuredClone(value)}}]}));}
+const initializeApp=()=>({}),getAuth=()=>({}),getFirestore=()=>({path:''}),doc=qaRef,collection=qaRef;
+const browserLocalPersistence={},setPersistence=async()=>{},onAuthStateChanged=(_auth,callback)=>{queueMicrotask(()=>callback({uid:'qa-user',email:'qa@example.com'}));return()=>{};};
+const signInWithEmailAndPassword=async()=>{},signOut=async()=>{};
+const getDoc=async ref=>{qaSeed();return qaSnap(qaRead()[ref.path]);};
+const getDocs=async ref=>({forEach:callback=>qaDocs(ref).forEach(callback)});
+const setDoc=async(ref,value,options)=>{const prior=qaRead()[ref.path]||{};qaWrite(ref,options?.merge?{...prior,...value}:value);};
+const onSnapshot=(ref,callback)=>{qaListeners.set(ref.path,callback);queueMicrotask(()=>callback({docChanges:()=>qaDocs(ref).map(doc=>({type:'added',doc}))}));return()=>qaListeners.delete(ref.path);};
+const runTransaction=async(_db,callback)=>{const writes=[],value=await callback({get:async ref=>qaSnap(qaRead()[ref.path]),set:(ref,data)=>writes.push([ref,data])});if(window.__qaDelayMs)await new Promise(resolve=>setTimeout(resolve,window.__qaDelayMs));for(const [ref,data] of writes)qaWrite(ref,data);return value;};
+const writeBatch=()=>({set(){},commit:async()=>{}}),serverTimestamp=()=>({seconds:1});
+window.__qaShared=()=>structuredClone(qaRead());
+window.__qaEmitStale=id=>{const key=QA_WORKSPACE+'/posts/'+encodeURIComponent(id),value=qaRead()[key],listener=qaListeners.get(QA_WORKSPACE+'/posts');if(value&&listener)listener({docChanges:()=>[{type:'modified',doc:{id:encodeURIComponent(id),data:()=>structuredClone(value)}}]});};
+`;
+let synced=false;
+const server=http.createServer((req,res)=>{const name=decodeURIComponent(req.url.split('?')[0]).replace(/^\//,'')||'index.html';const file=path.resolve(root,name);if(!file.startsWith(root+path.sep)){res.writeHead(403);res.end();return;}try{let body=fs.readFileSync(file,'utf8');if(name==='firebase-sync.js'){body=synced?shim+body.replace(/^import .*;\r?\n/gm,'').replace('installUI();await setPersistence','window.__qaSplitState=splitState;installUI();await setPersistence'):'';}if(name==='chatgpt-editorial.js')body=body.replace('function qualityAudit(plans){','function qualityAudit(plans){return {issues:[],exposure:{issues:[],summary:[]}};}function fullQualityAudit(plans){');res.writeHead(200,{'Content-Type':name.endsWith('.js')?'text/javascript':'text/html'});res.end(body);}catch{res.writeHead(404);res.end();}});
+const run=async()=>{await new Promise(resolve=>server.listen(0,'127.0.0.1',resolve));const browser=await chromium.launch({channel:'msedge',headless:true});try{
+ const page=await browser.newPage({viewport:{width:390,height:844}}),errors=[];
+ page.on('pageerror',error=>errors.push(error.message));page.on('console',message=>{if(message.type()==='error'&&!message.text().includes('favicon.ico'))errors.push(message.text());});
+ const url=`http://127.0.0.1:${server.address().port}/`;await page.goto(url);
+ const plans=await page.evaluate(()=>{const from='2026-10-05',plans=[];demo.conceptVersion=2;for(let i=0;i<10;i++){const date=dayAdd(from,i);let post=demo.posts.find(p=>p.date===date&&!p.deleted);if(!post){post=createConcept(date,i);demo.posts.push(post);}post.theme=i===0?'財布を長く使うために必要なこと':'旧企画 '+i;post.derivedTheme=i===0?'財布を長く使うために必要なこと｜困ったときに確かめる':'旧派生 '+i;post.parentId=i===0?'official-50':post.parentId;post.manual=false;post.actualAt=null;post.actualSnapshot=null;post.editorialSource='local-generator';const chosen=OFFICIAL_TOPICS.find(t=>t.number===(i===0?96:i+1)),word='企画'+i;plans.push({date,dayNumber:i+1,format:i%2?'Feed':'Reel',primaryPurpose:['CUSTOMER_VALUE','INSTAGRAM_GROWTH','BUSINESS'][i%3],customerValue:'実際の使い方を見て選ぶ',themeId:chosen.id,themeCategory:chosen.group,mainTopic:i===0?'財布は数字だけでなく、実際の使い方まで見て選ぶ':'新企画 '+i,angle:'具体的な使用場面',products:[],mainPostBody:`${word}を選ぶときに何を見るか。実物を自然光で確認し、手に取る場面と使った後の違いを示します。`.repeat(9),shots:[{media:i%2?'写真':'動画',what:'使用場面を正面から撮影',count:2,skuIds:[]}],story1:{text:'知識と発見 '+word,action:'観察',asset:'革見本',materialMode:'新規撮影必要',skuIds:[]},story2:{text:'困る場面を教えてください？ '+word,kind:'質問箱',action:'質問箱で回答',asset:'質問カード',materialMode:'新規撮影必要',skuIds:[]},story3:{text:'工房の道具を発見 '+word,action:'道具を観察',asset:'道具',materialMode:'新規撮影必要',skuIds:[]},story4:{text:'今日の投稿で選ぶ判断手順を確認 '+word,action:'投稿を確認',asset:'投稿導入',materialMode:'新規撮影必要',skuIds:[]},CTA:''});}persist();localStorage.setItem('__qa_old_local',JSON.stringify(demo));return plans;});
+ synced=true;await page.reload();await page.waitForFunction(()=>!!window.todo2SyncBridge?.flush&&!document.body.classList.contains('firebase-locked'));
+ await page.evaluate(plans=>{go('plan');document.querySelector('#importTenEditorial').click();document.querySelector('[name=json]').value=JSON.stringify({schema:'cian-editorial-v1',scope:'ten-day',plans});document.querySelector('#workForm').requestSubmit();},plans);
+ assert((await page.locator('#workTitle').textContent()).includes('プレビュー'));assert((await page.locator('#workForm').textContent()).includes('新案を反映する日：10件／10件'));
+ // Force the missing-event path: the old flush implementation falsely reported success here.
+ await page.evaluate(()=>{firebaseSyncApplying=true;});await page.locator('#workForm .save-foot button').click();await page.locator('#workDialog').waitFor({state:'hidden'});
+ const shared=await page.evaluate(()=>window.__qaShared());const rows=Object.values(shared).filter(doc=>doc.value?.date>='2026-10-05'&&doc.value?.date<='2026-10-14');assert.equal(rows.length,10);assert.equal(rows.find(row=>row.value.date==='2026-10-05').value.theme,plans[0].mainTopic);
+ await page.evaluate(()=>{localStorage.setItem(MOCK_KEY,localStorage.getItem('__qa_old_local'));});await page.reload();await page.waitForFunction(()=>!!window.todo2SyncBridge?.flush&&!document.body.classList.contains('firebase-locked'));
+ const restored=await page.evaluate(()=>{go('plan');document.querySelector('[data-editorial-period=next]').click();return demo.posts.filter(p=>p.date>='2026-10-05'&&p.date<='2026-10-14'&&!p.deleted).map(p=>({date:p.date,theme:p.theme,caption:p.caption,stories:p.stories.map(s=>s.text),products:p.skuIds}));});
+ assert.equal(restored.length,10);for(const plan of plans){const row=restored.find(p=>p.date===plan.date);assert.equal(row.theme,plan.mainTopic);assert.equal(row.caption,plan.mainPostBody);assert.deepEqual(row.stories,[1,2,3,4].map(n=>plan['story'+n].text));assert.deepEqual(row.products,plan.products);}
+ // A shared write failure must keep the same preview and permit one-click retry.
+ const retryPlans=structuredClone(plans);retryPlans[0].mainTopic='再試行で保存する新企画';
+ await page.evaluate(next=>{go('plan');document.querySelector('#importTenEditorial').click();document.querySelector('[name=json]').value=JSON.stringify({schema:'cian-editorial-v1',scope:'ten-day',plans:next});document.querySelector('#workForm').requestSubmit();window.__qaFailPostId=demo.posts.find(p=>p.date==='2026-10-05').id;},retryPlans);
+ await page.locator('#workForm .save-foot button').click();await page.waitForFunction(()=>document.querySelector('#workError')?.textContent.includes('共有保存'));
+ assert.equal(await page.locator('#workDialog').evaluate(dialog=>dialog.open),true);
+ assert.equal(await page.evaluate(()=>Object.values(window.__qaShared()).find(doc=>doc.value?.date==='2026-10-05').value.theme),plans[0].mainTopic);
+ await page.evaluate(()=>{window.__qaFailPostId=null;});await page.locator('#workForm .save-foot button').click();await page.locator('#workDialog').waitFor({state:'hidden'});
+ assert.equal(await page.evaluate(()=>Object.values(window.__qaShared()).find(doc=>doc.value?.date==='2026-10-05').value.theme),retryPlans[0].mainTopic);
+ assert.equal(await page.evaluate(()=>Object.values(window.__qaShared()).filter(doc=>doc.value?.date==='2026-10-05').length),1);
+ await page.reload();await page.waitForFunction(()=>!!window.todo2SyncBridge?.flush&&!document.body.classList.contains('firebase-locked'));
+ assert.equal(await page.evaluate(()=>demo.posts.find(post=>post.date==='2026-10-05').theme),retryPlans[0].mainTopic);
+ // Posted and explicitly edited content must survive a later whole-period import.
+ const protectedBefore=await page.evaluate(async()=>{const posts=demo.posts.filter(post=>post.date>='2026-10-05'&&post.date<='2026-10-14');posts[0].actualAt='2026-10-05T18:00:00+09:00';posts[0].actualSnapshot={theme:posts[0].theme};posts[1].manual=true;posts[1].caption='保存済みの手動本文';posts[1].manualFields={caption:true,stories:[false,false,false,false],revision:posts[1].revision};posts[2].manual=true;posts[2].stories[0].manual=true;posts[2].stories[0].text='保存済みの手動Story';posts[2].manualFields={caption:false,stories:[true,false,false,false],revision:posts[2].revision};persist();await window.todo2SyncBridge.flush(window.todo2SyncBridge.read(),posts.slice(0,3).map(post=>post.id));return {posted:structuredClone(posts[0]),records:structuredClone(demo.records),months:structuredClone(demo.months),reactions:structuredClone(demo.reactions)};});
+ const protectedPlans=structuredClone(retryPlans);for(const plan of protectedPlans){plan.mainTopic+='・改訂';plan.mainPostBody+='改訂内容。';plan.story1.text+='・改訂';plan.story2.text+='・改訂';}
+ await page.evaluate(next=>{go('plan');document.querySelector('#importTenEditorial').click();document.querySelector('[name=json]').value=JSON.stringify({schema:'cian-editorial-v1',scope:'ten-day',plans:next});document.querySelector('#workForm').requestSubmit();window.__qaDelayMs=200;},protectedPlans);
+ await page.locator('#workForm .save-foot button').click();await page.evaluate(()=>window.__qaEmitStale(demo.posts.find(post=>post.date==='2026-10-08').id));
+ assert.equal(await page.evaluate(()=>demo.posts.find(post=>post.date==='2026-10-08').theme),protectedPlans[3].mainTopic);
+ await page.locator('#workDialog').waitFor({state:'hidden'});
+ await page.reload();await page.waitForFunction(()=>!!window.todo2SyncBridge?.flush&&!document.body.classList.contains('firebase-locked'));
+ const protectedAfter=await page.evaluate(()=>({posts:demo.posts.filter(post=>post.date>='2026-10-05'&&post.date<='2026-10-14'),records:demo.records,months:demo.months,reactions:demo.reactions}));
+ assert.deepEqual(protectedAfter.posts.find(post=>post.date==='2026-10-05'),protectedBefore.posted);
+ assert.equal(protectedAfter.posts.find(post=>post.date==='2026-10-06').caption,'保存済みの手動本文');
+ assert.equal(protectedAfter.posts.find(post=>post.date==='2026-10-06').theme,protectedPlans[1].mainTopic);
+ assert.equal(protectedAfter.posts.find(post=>post.date==='2026-10-07').stories[0].text,'保存済みの手動Story');
+ assert.equal(protectedAfter.posts.find(post=>post.date==='2026-10-07').stories[1].text,protectedPlans[2].story2.text);
+ for(let i=3;i<10;i++)assert.equal(protectedAfter.posts.find(post=>post.date===protectedPlans[i].date).theme,protectedPlans[i].mainTopic);
+ for(const key of ['records','months','reactions'])assert.deepEqual(protectedAfter[key],protectedBefore[key]);
+ assert.equal(await page.evaluate(()=>document.documentElement.scrollWidth<=window.innerWidth),true);assert.deepEqual(errors,[]);console.log('PASS real sync module with mocked Firestore: import 10/10, shared write, stale local reload, all days restored');
+ }finally{await browser.close();await new Promise(resolve=>server.close(resolve));}};
+run().catch(error=>{console.error(error);server.close();process.exitCode=1;});

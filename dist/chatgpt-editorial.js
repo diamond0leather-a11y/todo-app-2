@@ -191,7 +191,7 @@ function applyPreview(){
 }
 async function savePreview(target){
   if(!target)throw Error('プレビューを開き直してください。');
-  if(target.localApplied){persist();await window.todo2SyncBridge.flush();finishPreview(target);return;}
+  if(target.localApplied){persist();await window.todo2SyncBridge.flush(window.todo2SyncBridge.read(),target.savedPostIds);finishPreview(target);return;}
   const period=importPeriod(target.data);
   if(period.from!==target.period.from||period.to!==target.period.to)throw Error('対象期間が変わりました。プレビューを開き直してください。');
   if(validate(target.data).some(note=>note.level==='要修正'))throw Error('10日全体の内容を修正してから再度取り込んでください。');
@@ -214,8 +214,9 @@ async function savePreview(target){
     if(base.manualFields)base.manualFields.revision=base.revision;
   }
   try{localStorage.setItem(MOCK_KEY,JSON.stringify(demo));}catch(e){demo.posts=previousPosts;displayedPeriod=previousPeriod;throw Error('端末への保存に失敗しました。容量とブラウザの保存設定を確認してください。');}
-  target.localApplied={count:eligible.length,total:target.data.plans.length};persist();
-  await window.todo2SyncBridge.flush();finishPreview(target);
+  target.localApplied={count:eligible.length,total:target.data.plans.length};
+  target.savedPostIds=target.data.plans.map(plan=>demo.posts.find(post=>post.date===plan.date&&!post.deleted)?.id).filter(Boolean);
+  persist();await window.todo2SyncBridge.flush(window.todo2SyncBridge.read(),target.savedPostIds);finishPreview(target);
 }
 function finishPreview(target){const {count,total}=target.localApplied;refreshWork();preview=null;previewDialog.close();toast(`${count}投稿へ反映しました${count<total?'。保護対象は旧案を維持しました':''}`);}
 function copyText(scope){const selected=scope==='ten-day'&&displayedPeriod==='next'?nextEditorialPrompt():prompt(scope);navigator.clipboard.writeText(selected).then(()=>toast((scope==='month'?'月間':'表示中の期間の')+'編集コンテキストをコピーしました'));}
