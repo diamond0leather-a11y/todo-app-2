@@ -5,7 +5,7 @@ import {getFirestore,doc,collection,getDoc,getDocs,setDoc,onSnapshot,runTransact
 const FIREBASE_CONFIG={apiKey:'AIzaSyCP72jrIwY4LzkdmBChyMhMQv0ew_wo0FI',authDomain:'todo-app-2-bc3f1.firebaseapp.com',projectId:'todo-app-2-bc3f1',storageBucket:'todo-app-2-bc3f1.firebasestorage.app',messagingSenderId:'1034830891831',appId:'1:1034830891831:web:b3194d6559af43369e28b2'};
 const WORKSPACE_ID='cian-en-paclam',LOCAL_KEY='cian_confirmed_073538_revision_demo_v1',SCHEMA_VERSION=1;
 const app=initializeApp(FIREBASE_CONFIG),auth=getAuth(app),db=getFirestore(app),workspace=doc(db,'workspaces',WORKSPACE_ID);
-let currentUser=null,unsubscribers=[],remoteDocs=new Map(),localBaseline=new Map(),writeTimer=null,queuedState=null,queuedGeneration=0,applyingRemote=false,initialized=false,saving=false,pendingWrites=0,writeFailed=false,saveQueue=Promise.resolve(),authGeneration=0;
+let currentUser=null,unsubscribers=[],remoteDocs=new Map(),localBaseline=new Map(),conflictBases=new Map(),writeTimer=null,queuedState=null,queuedGeneration=0,applyingRemote=false,initialized=false,saving=false,pendingWrites=0,writeFailed=false,saveQueue=Promise.resolve(),authGeneration=0;
 
 const clean=value=>JSON.parse(JSON.stringify(value));
 const same=(a,b)=>JSON.stringify(a)===JSON.stringify(b);
@@ -87,13 +87,44 @@ function mergeValue(base,local,remote){
 async function safeWrite(key,payload,base,generation,uid){
  const [group,id]=key.split('/'),ref=doc(workspace,group,id);
  if(generation!==authGeneration)throw Error('session-ended');
- const saved=await runTransaction(db,async tx=>{const snap=await tx.get(ref),current=snap.exists()?snap.data():null;if(generation!==authGeneration)throw Error('session-ended');if(group==='posts'&&current?.value&&((current.value.actualAt&&!base?.value?.actualAt)||(current.value.actualSnapshot&&!base?.value?.actualSnapshot)))throw Error('sync-conflict');if(payload.deleted&&current&&!same(base?.value,current.value))throw Error('sync-conflict');const value=payload.deleted?undefined:mergeValue(base?.value,payload.value,current?.value);if(group==='posts'&&value&&base?.value&&current?.value&&!same(base.value,current.value)&&!same(payload.value,current.value))value.revision=Math.max(current.value.revision||0,payload.value.revision||0)+1;const next={...payload,...(payload.deleted?{}:{value}),version:(current?.version||0)+1,updatedAt:serverTimestamp(),updatedBy:uid};tx.set(ref,next);return {...next,updatedAt:undefined,updatedBy:undefined};});if(generation===authGeneration)remoteDocs.set(key,saved);
+ const saved=await runTransaction(db,async tx=>{const snap=await tx.get(ref),current=snap.exists()?snap.data():null;if(generation!==authGeneration)throw Error('session-ended');if(group==='posts'&&current?.value&&((current.value.actualAt&&!base?.value?.actualAt)||(current.value.actualSnapshot&&!base?.value?.actualSnapshot)))throw Error('sync-conflict');if(payload.deleted&&current&&!same(base?.value,current.value))throw Error('sync-conflict');const value=payload.deleted?undefined:mergeValue(base?.value,payload.value,current?.value);if(group==='posts'&&value&&base?.value&&current?.value&&!same(base.value,current.value)&&!same(payload.value,current.value))value.revision=Math.max(current.value.revision||0,payload.value.revision||0)+1;const next={...payload,...(payload.deleted?{}:{value}),version:(current?.version||0)+1,updatedAt:serverTimestamp(),updatedBy:uid};tx.set(ref,next);return {...next,updatedAt:undefined,updatedBy:undefined};});if(generation===authGeneration)remoteDocs.set(key,saved);return saved;
+}
+
+async function rebaseConflicts(state){
+ if(!conflictBases.size)return state;
+ const entries=splitState(state),resolved=[];
+ for(const [key,base] of conflictBases){
+  const [group,id]=key.split('/'),snap=await getDoc(doc(workspace,group,id)),current=snap.exists()?snap.data():null,local=entries.get(key);
+  if(!local||!current||current.deleted)throw Error('sync-conflict');
+  if(group==='posts'&&current.value&&((current.value.actualAt&&!base?.value?.actualAt)||(current.value.actualSnapshot&&!base?.value?.actualSnapshot)))throw Error('sync-conflict');
+  const value=mergeValue(base?.value,local.value,current.value);
+  resolved.push([key,{...local,value},{...current,updatedAt:undefined,updatedBy:undefined}]);
+ }
+ for(const [key,local,remote] of resolved){entries.set(key,local);remoteDocs.set(key,remote);localBaseline.set(key,clean(remote));conflictBases.delete(key);}
+ const rebased=joinState(entries);window.todo2SyncBridge.replace(rebased);return rebased;
 }
 
 async function saveState(state,baseline,generation){
  if(!currentUser||!initialized||applyingRemote||generation!==authGeneration)throw Error('session-ended');const uid=currentUser.uid,next=splitState(state),keys=new Set([...baseline.keys(),...next.keys()]),changed=[];
  for(const key of keys){const before=baseline.get(key),after=next.get(key);if(after&&!same(before?.value,after.value))changed.push([key,after,before]);else if(!after&&before&&!before.deleted)changed.push([key,{entityId:before.entityId,deleted:true},before]);}
- if(!changed.length){writeFailed=false;status('共有データを保存しました');return;}saving=true;status('共有データを保存中…');try{for(const [key,payload,before] of changed){await safeWrite(key,payload,before,generation,uid);if(generation!==authGeneration)throw Error('session-ended');localBaseline.set(key,clean(payload));}await setDoc(workspace,{updatedAt:serverTimestamp(),updatedBy:uid},{merge:true});if(generation!==authGeneration)throw Error('session-ended');writeFailed=false;status('共有データを保存しました');}catch(e){if(generation===authGeneration){writeFailed=true;status(e.message==='sync-conflict'?'同じ項目に別端末の変更があります。再読み込み前に未保存の内容を確認してください。':'共有保存を待機しています。接続後に再度保存してください。',true);}throw e;}finally{if(generation===authGeneration)saving=false;}
+ if(!changed.length){writeFailed=false;status('共有データを保存しました');return;}
+ const mergedPosts=[];
+ const applyMerged=()=>{if(!mergedPosts.length)return;const latest=window.todo2SyncBridge.read();let changedLocal=false;for(const [before,after] of mergedPosts){const index=latest.posts.findIndex(post=>post.id===before.id);if(index>=0&&same(latest.posts[index],before)){latest.posts[index]=after;changedLocal=true;}}if(changedLocal)window.todo2SyncBridge.replace(latest);};
+ saving=true;status('共有データを保存中…');
+ try{
+  for(const [key,payload,before] of changed){
+   let saved;
+   try{saved=await safeWrite(key,payload,before,generation,uid);}
+   catch(error){if(error.message==='sync-conflict'&&generation===authGeneration){conflictBases.set(key,before?clean(before):null);const [group,id]=key.split('/'),snap=await getDoc(doc(workspace,group,id));if(snap.exists())remoteDocs.set(key,{...snap.data(),updatedAt:undefined,updatedBy:undefined});}throw error;}
+   if(generation!==authGeneration)throw Error('session-ended');
+   localBaseline.set(key,clean(saved));conflictBases.delete(key);
+   if(key.startsWith('posts/')&&saved.value&&!same(saved.value,payload.value))mergedPosts.push([payload.value,saved.value]);
+  }
+  await setDoc(workspace,{updatedAt:serverTimestamp(),updatedBy:uid},{merge:true});
+  if(generation!==authGeneration)throw Error('session-ended');
+  applyMerged();writeFailed=false;status('共有データを保存しました');
+ }catch(e){if(generation===authGeneration){applyMerged();writeFailed=true;status(e.message==='sync-conflict'?'同じ項目に別端末の変更があります。再読み込み前に未保存の内容を確認してください。':'共有保存を待機しています。接続後に再度保存してください。',true);}throw e;}
+ finally{if(generation===authGeneration)saving=false;}
 }
 
 function submitQueued(){
@@ -106,9 +137,10 @@ function queueLocalSave(state){if(writeTimer)clearTimeout(writeTimer);else pendi
 window.addEventListener('todo2:local-save',event=>{if(!currentUser||!initialized||applyingRemote)return;queueLocalSave(event.detail.state);});
 window.todo2SyncBridge.flush=async(state,postIds=[])=>{
  if(!currentUser||!initialized)throw Error('共有データへ接続できません。ログインと接続を確認してください。');
+ if(state)state=await rebaseConflicts(state);
  if(state)queueLocalSave(state);await submitQueued();
  if(!state||!postIds.length)return;
- const expected=new Map((state.posts||[]).map(post=>[post.id,post]));
+ const expected=new Map((window.todo2SyncBridge.read().posts||[]).map(post=>[post.id,post]));
  try{for(const id of postIds){const post=expected.get(id),key='posts/'+safeId(id),snap=await getDoc(doc(workspace,'posts',safeId(id))),actual=snap.exists()?snap.data():null;
   if(!post||!actual||actual.deleted||!same(actual.value,post)){
    if(actual){remoteDocs.set(key,{...actual,updatedAt:undefined,updatedBy:undefined});localBaseline.set(key,clean(actual));}else{remoteDocs.delete(key);localBaseline.delete(key);}
@@ -119,7 +151,7 @@ window.todo2SyncBridge.flush=async(state,postIds=[])=>{
 document.addEventListener('close',()=>applyRemoteSoon(),true);
 
 installUI();await setPersistence(auth,browserLocalPersistence);onAuthStateChanged(auth,async user=>{
- const generation=++authGeneration;unsubscribers.forEach(fn=>fn());unsubscribers=[];clearTimeout(writeTimer);writeTimer=null;queuedState=null;pendingWrites=0;writeFailed=false;saving=false;saveQueue=Promise.resolve();currentUser=user;initialized=false;remoteDocs.clear();localBaseline.clear();
+ const generation=++authGeneration;unsubscribers.forEach(fn=>fn());unsubscribers=[];clearTimeout(writeTimer);writeTimer=null;queuedState=null;pendingWrites=0;writeFailed=false;saving=false;saveQueue=Promise.resolve();currentUser=user;initialized=false;remoteDocs.clear();localBaseline.clear();conflictBases.clear();
  if(!user){document.body.classList.add('firebase-locked');document.querySelector('#firebaseLogin').hidden=false;document.querySelector('#firebaseAuthLoading').hidden=true;document.querySelector('#firebaseLoginForm').hidden=false;document.querySelector('#firebaseSyncBar').hidden=true;return;}
  document.querySelector('#firebaseLogin').hidden=true;document.querySelector('#firebaseSyncBar').hidden=false;status('共有データを読み込み中…');
  try{await setDoc(doc(workspace,'members',user.uid),{email:user.email,active:true,lastSeenAt:serverTimestamp()},{merge:true});if(generation!==authGeneration)return;await ensureWorkspace();if(generation!==authGeneration)return;remoteDocs=await readWorkspace();if(generation!==authGeneration)return;const shared=joinState(remoteDocs);if(shared.schema!==1)throw Error('workspace-incomplete');initialized=true;window.todo2SyncBridge.replace(shared);localBaseline=new Map([...remoteDocs].map(([key,value])=>[key,clean(value)]));document.body.classList.remove('firebase-locked');listen();status('共有データを同期しました');}catch(e){if(generation!==authGeneration)return;document.body.classList.add('firebase-locked');document.querySelector('#firebaseLogin').hidden=false;document.querySelector('#firebaseAuthLoading').hidden=true;document.querySelector('#firebaseLoginForm').hidden=false;document.querySelector('#firebaseLoginError').textContent=e.message==='workspace-incomplete'?'共有データが途中まで存在します。自動移行は停止しました。データを確認してください。':'共有データを開けませんでした。Firestoreの権限と接続を確認してください。';status('共有データを開けませんでした',true);}
