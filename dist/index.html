@@ -1634,6 +1634,7 @@ const recordedSevenDayCard=taskWorkCard;taskWorkCard=function(task){const markup
 const scopedLearningPayload=analysisPayload;
 analysisPayload=function(){const data=scopedLearningPayload(),from=nextPlanInfo()?.nextFrom||demo.planStart,ids=new Set(planContext(from).recent.filter(p=>p.actualAt).map(p=>p.id));return {...data,nextPlanFeedback:{...data.nextPlanFeedback,comments:data.nextPlanFeedback.comments.filter(c=>ids.has(c.postId||String(c.recordId).split('|')[0]))}};};
 const postingStatusLearning=analysisPayload;analysisPayload=function(){const data=postingStatusLearning();return {...data,targetPlan:(data.targetPlan||[]).filter(p=>!p.noPostConfirmedAt),notPostedPlans:demo.posts.filter(p=>p.noPostConfirmedAt&&!p.actualAt&&!p.deleted&&p.date>=analysisFrom&&p.date<=analysisTo).map(p=>({postId:p.id,date:p.date,status:'投稿なし確認済み',confirmedAt:p.noPostConfirmedAt,plannedThemeId:p.themeId||p.parentId||null,plannedSkuIds:[...p.skuIds]}))};};
+document.addEventListener('click',e=>{const button=e.target.closest('[data-work-review-date]');if(!button)return;e.preventDefault();e.stopImmediatePropagation();reviewDate=button.dataset.workReviewDate;homeReviewFilter=null;renderReviewWork();const saved=reviewCalendarTasks(reviewDate).filter(t=>t.stage==='7d'&&demo.records[t.key]);if(saved.length===1)editRecord(saved[0].key);else dx('#todayRecordsWork').scrollIntoView({block:'start'});},true);
 </script>
 <script src="./period-planner.js"></script>
 <script src="./chatgpt-editorial.js"></script>
