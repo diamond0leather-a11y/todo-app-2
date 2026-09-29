@@ -67,5 +67,18 @@ const wait=ms=>new Promise(resolve=>setTimeout(resolve,ms));
  await assert.rejects(browser.todo2SyncBridge.flush(local,['post-8','post-9']),/sync-conflict/);
  const firstVersion=remote.get(key(8)).version;remoteEdit(9,{caption:saved.posts[9].caption,remoteNote:'resolved elsewhere'});
  await browser.todo2SyncBridge.flush(local,['post-8','post-9']);assert.equal(remote.get(key(8)).version,firstVersion);assert.equal(remote.get(key(9)).value.caption,'local after conflict');assert.equal(remote.get(key(9)).value.remoteNote,'resolved elsewhere');
+ // Firestore's 2026-10-06 shape: legacy shot IDs belong to a generated draft, not the post ID.
+ const postId='7ade6d85-2e8e-4c07-ab09-d9bc54a41bd0',legacyId='d2d8a1a0-802d-47cc-a24a-3fedbbb07c5e';
+ const fixture=structuredClone(saved),legacyShots=Array.from({length:3},(_,i)=>({id:`${legacyId}-shot-${i}`,media:'動画',count:1,what:`既存カット${i}`,signature:`topic-92|${i}|Reel`,skuIds:i===2?['sku-0-0-14','sku-1-0-0','sku-0-0-15']:[]}));
+ Object.assign(fixture.posts[1],{id:postId,date:'2026-10-06',revision:2,shots:legacyShots,sequence:legacyShots.map((shot,i)=>({order:i+1,shotId:shot.id})),stories:legacyShots.map((shot,i)=>({slot:i+1,shotId:shot.id,text:'既存Story'}))});
+ const seedFixture=()=>{local=structuredClone(fixture);bridge.seed(fixture);remote.clear();for(const [name,payload] of bridge.splitState(fixture))remote.set(`workspaces/cian-en-paclam/${name}`,{...payload,version:1});};
+ const fixtureKey=`workspaces/cian-en-paclam/posts/${postId}`;
+ seedFixture();local.posts[1].revision=3;local.posts[1].shots=legacyShots.map((shot,i)=>({...shot,id:`${postId}-editorial-shot-${i+1}`,what:`新案カット${i}`}));
+ await browser.todo2SyncBridge.flush(local,[postId]);assert.equal(remote.get(fixtureKey).value.shots[0].id,`${postId}-editorial-shot-1`);
+ seedFixture();local.posts[1].revision=3;local.posts[1].shots=legacyShots.map((shot,i)=>({...shot,id:`${postId}-editorial-shot-${i+1}`}));
+ const remotePost=structuredClone(remote.get(fixtureKey));remotePost.value.shots[0].what='別端末の変更';remote.set(fixtureKey,remotePost);
+ const logs=[],originalError=console.error;console.error=(...args)=>logs.push(args);
+ try{await assert.rejects(browser.todo2SyncBridge.flush(local,[postId]),/sync-conflict/);}finally{console.error=originalError;}
+ const diagnostic=logs.find(([tag])=>tag==='[TODO2_SYNC_CONFLICT]')?.[1];assert(diagnostic);assert.deepEqual(diagnostic.fields,[]);assert.equal(diagnostic.baselineDocumentVersion,1);assert.equal(diagnostic.firestoreDocumentVersion,1);assert.equal(diagnostic.baselineShotsCount,3);assert.equal(diagnostic.localShotsCount,3);assert.equal(diagnostic.firestoreShotsCount,3);assert.equal(diagnostic.baselineVsFirestoreDeepEqual,false);assert.equal(diagnostic.diagnosticVersion,'shots-flat-v2');assert(!JSON.stringify(diagnostic).includes('既存カット'));assert(!JSON.stringify(diagnostic).includes('別端末の変更'));
  console.log('PASS mocked shared save, disjoint merge, true conflict, latest-state retry, posted/manual protection, partial retry, reload, no duplicates');
 })().catch(error=>{console.error(error);process.exitCode=1;});

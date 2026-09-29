@@ -200,19 +200,30 @@ async function savePreview(target){
   for(const plan of target.data.plans){const old=demo.posts.find(p=>p.date===plan.date&&!p.deleted),seen=target.revisions[plan.date];if((old?.id||null)!==(seen?.id||null)||(old?.revision||null)!==(seen?.revision||null))throw Error(`${short(plan.date)}の投稿がプレビュー中に変更されました。開き直して確認してください。`);}
   const eligible=target.data.plans.filter(plan=>!importProtection(demo.posts.find(p=>p.date===plan.date&&!p.deleted),target.legacyChoices[plan.date]).whole);
   if(!eligible.length)throw Error('すべての投稿が保護されています。置き換える項目を明示的に選ぶか、現在の内容を維持してください。');
-  const previousPosts=structuredClone(demo.posts),previousPeriod=displayedPeriod;
-  displayedPeriod=period.from===salesCycleBlock().nextFrom?'next':'current';
+  const previousPosts=demo.posts,previousPeriod=displayedPeriod,nextPosts=structuredClone(demo.posts);
   for(const x of target.data.plans){
-    const old=demo.posts.find(p=>p.date===x.date&&!p.deleted),lock=importProtection(old,target.legacyChoices[x.date]);
+    const old=nextPosts.find(p=>p.date===x.date&&!p.deleted),lock=importProtection(old,target.legacyChoices[x.date]);
     if(lock.whole)continue;
     const topic=OFFICIAL_TOPICS.find(t=>t.id===x.themeId),base=old||{id:newId(),date:x.date,plannedTime:'18:00',actualAt:null,revision:0,manual:false,shots:[],reviewNeeded:[]};
     const stories=[x.story1,x.story2,x.story3,x.story4].map((story,i)=>lock.stories[i]?base.stories[i]:({...story,slot:i+1,purpose:STORY_ROLES[i],skuIds:story.skuIds||[],storySpecVersion:4}));
+    if(!lock.meta){
+      const oldShots=old?.shots||[],protectedShotIds=new Set(stories.filter((_,i)=>lock.stories[i]).map(story=>story.shotId).filter(Boolean));
+      const newShots=x.shots.map((shot,i)=>({...shot,id:base.id+'-editorial-shot-r'+((base.revision||0)+1)+'-'+(i+1),signature:[base.id,'editorial',i,shot.media,shot.what,...shot.skuIds].join('|')}));
+      const sourceIds=new Map(x.shots.map((shot,i)=>[shot.id,newShots[i].id]).filter(([id])=>id));
+      for(const [i,story] of stories.entries())if(!lock.stories[i]&&story.shotId){story.shotId=sourceIds.get(story.shotId)||story.shotId;}
+      base.shots=[...newShots,...oldShots.filter(shot=>protectedShotIds.has(shot.id))];
+      base.sequence=newShots.map((shot,i)=>({order:i+1,visual:shot.what,words:'',shotId:shot.id}));
+    }
     if(!lock.meta)Object.assign(base,{format:x.format,primaryAxis:x.primaryPurpose,parentId:x.themeId,topicGroup:topic.group,theme:x.mainTopic,derivedTheme:x.mainTopic,takeaway:x.customerValue,cta:x.CTA||'',skuIds:[...(x.products||[])],researchRequired:!!topic.researchRequired,researchSources:x.researchSources||[],researchVerified:topic.number>=66&&topic.number<=80?target.researchConfirmed:false});
     Object.assign(base,{caption:lock.caption?base.caption:x.mainPostBody,stories,revision:(base.revision||0)+1,editorialSource:'chatgpt-import'});
-    if(!lock.meta){const protectedShotIds=new Set(stories.filter((_,i)=>lock.stories[i]).map(story=>story.shotId).filter(Boolean));base.shots=[...x.shots.map((shot,i)=>({...shot,id:base.id+'-editorial-shot-'+(i+1),signature:[base.id,'editorial',i,shot.media,shot.what,...shot.skuIds].join('|')})),...(old?.shots||[]).filter(shot=>protectedShotIds.has(shot.id))];}
-    if(!old)demo.posts.push(base);
+    const shotIds=new Set((base.shots||[]).map(shot=>shot.id));
+    if(shotIds.size!==(base.shots||[]).length)throw Error(`${short(x.date)}の撮影IDが重複しています。`);
+    if([...(base.sequence||[]),...stories].some(row=>row.shotId&&!shotIds.has(row.shotId)))throw Error(`${short(x.date)}の撮影IDと構成・Storyの参照が一致しません。`);
+    if(!old)nextPosts.push(base);
     if(base.manualFields)base.manualFields.revision=base.revision;
   }
+  demo.posts=nextPosts;
+  displayedPeriod=period.from===salesCycleBlock().nextFrom?'next':'current';
   try{localStorage.setItem(MOCK_KEY,JSON.stringify(demo));}catch(e){demo.posts=previousPosts;displayedPeriod=previousPeriod;throw Error('端末への保存に失敗しました。容量とブラウザの保存設定を確認してください。');}
   target.localApplied={count:eligible.length,total:target.data.plans.length};
   target.savedPostIds=target.data.plans.map(plan=>demo.posts.find(post=>post.date===plan.date&&!post.deleted)?.id).filter(Boolean);
