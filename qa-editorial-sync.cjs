@@ -2,6 +2,7 @@
 const fs=require('fs'),path=require('path'),assert=require('assert');
 const source=fs.readFileSync(path.join(__dirname,'dist/firebase-sync.js'),'utf8')
  .replace(/^import .*;\r?\n/gm,'').split('installUI();await setPersistence')[0];
+assert.match(fs.readFileSync(path.join(__dirname,'dist/index.html'),'utf8'),/firebase-sync\.js\?diagnostics=shots-flat-v2&amp;merge=structural-v1/);
 const listeners=new Map(),remote=new Map(),status={hidden:false,textContent:'',classList:{toggle(){}}};
 let local=null,failKey=null,failMeta=false,writes=0,reads=0;
 const browser=new EventTarget();
@@ -77,6 +78,9 @@ const wait=ms=>new Promise(resolve=>setTimeout(resolve,ms));
  seedFixture();local.posts[1].revision=3;local.posts[1].shots=legacyShots.map((shot,i)=>({...shot,id:`${postId}-editorial-shot-r3-${i+1}`,what:`新案カット${i}`}));local.posts[1].sequence=local.posts[1].shots.map((shot,i)=>({order:i+1,visual:shot.what,words:'',shotId:shot.id}));local.posts[1].stories=local.posts[1].stories.map((story,i)=>({...story,shotId:local.posts[1].shots[i].id}));
  const sameRemote=structuredClone(remote.get(fixtureKey));sameRemote.value=reorder(sameRemote.value);remote.set(fixtureKey,sameRemote);
  await browser.todo2SyncBridge.flush(local,[postId]);assert.equal(remote.get(fixtureKey).value.revision,3);assert.equal(remote.get(fixtureKey).version,2);assert.deepEqual(remote.get(fixtureKey).value.shots,local.posts[1].shots);
+ seedFixture();local.posts[1].revision=3;local.posts[1].shots=legacyShots.slice(0,2).map((shot,i)=>({...shot,id:`${postId}-two-shot-${i+1}`,what:`新案2カット${i}`}));local.posts[1].sequence=local.posts[1].shots.map((shot,i)=>({order:i+1,shotId:shot.id}));local.posts[1].stories=local.posts[1].stories.map((story,i)=>i<2?{...story,shotId:local.posts[1].shots[i].id}:{slot:story.slot,text:story.text});
+ const twoShotPlan=structuredClone(local.posts[1]);await browser.todo2SyncBridge.flush(local,[postId]);const twoShotSaved=remote.get(fixtureKey).value;assert.equal(twoShotSaved.revision,3);assert.deepEqual(twoShotSaved.shots,twoShotPlan.shots);assert.deepEqual(twoShotSaved.sequence,twoShotPlan.sequence);assert.deepEqual(twoShotSaved.stories,twoShotPlan.stories);assert.equal(new Set(twoShotSaved.shots.map(shot=>shot.id)).size,2);for(const ref of [...twoShotSaved.sequence,...twoShotSaved.stories])if(ref.shotId)assert(twoShotSaved.shots.some(shot=>shot.id===ref.shotId));
+ seedFixture();local.posts[1]=structuredClone(twoShotPlan);const concurrent=structuredClone(remote.get(fixtureKey));concurrent.value.shots[0].what='別端末の撮影変更';concurrent.value.sequence[0].order=2;remote.set(fixtureKey,concurrent);await assert.rejects(browser.todo2SyncBridge.flush(local,[postId]),/sync-conflict/);assert.equal(remote.get(fixtureKey).value.shots[0].what,'別端末の撮影変更');
  seedFixture();local.posts[1].revision=3;local.posts[1].shots=legacyShots.map((shot,i)=>({...shot,id:`${postId}-editorial-shot-${i+1}`,what:`新案カット${i}`}));
  await browser.todo2SyncBridge.flush(local,[postId]);assert.equal(remote.get(fixtureKey).value.shots[0].id,`${postId}-editorial-shot-1`);
  seedFixture();local.posts[1].revision=3;local.posts[1].shots=legacyShots.map((shot,i)=>({...shot,id:`${postId}-editorial-shot-${i+1}`}));
