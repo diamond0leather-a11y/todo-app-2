@@ -45,7 +45,7 @@ assert(!('noPostConfirmedAt' in noPost));assert.equal(noPost.actualSnapshot.skuI
 assert(taskContext.allTasks().some(task=>task.key==='post-2|7d'),'corrected post must enter normal 7d workflow');
 
 const missed={id:'post-3',date:'2026-09-11',skuIds:[planned],theme:'予定',noPostConfirmedAt:'2026-09-11T12:00:00.000Z'};demo.posts.push(missed);
-const analysisContext={demo,analysisFrom:'2026-09-01',analysisTo:'2026-09-20',analysisPayload:()=>({targetPlan:[missed],posts:[],unconfirmedActualPosts:[]})};
+const analysisContext={demo,analysisFrom:'2026-09-01',analysisTo:'2026-09-20',noPostCalendarDate:p=>p.noPostDate||(p.actualAt?String(p.actualAt).slice(0,10):p.date),analysisPayload:()=>({targetPlan:[missed],posts:[],unconfirmedActualPosts:[]})};
 vm.runInNewContext(between(daily,'const postingStatusLearning=analysisPayload;','\n'),analysisContext);
 const analysis=analysisContext.analysisPayload();assert.equal(analysis.notPostedPlans.length,1);assert.equal(analysis.targetPlan.length,0);assert.equal(analysis.posts.length,0);assert.equal(analysis.unconfirmedActualPosts.length,0);
 const compactContext={compactAnalysisPayload:()=>({schema:2})};vm.runInNewContext(between(axis,'const compactPostingStatus=compactAnalysisPayload;','exportPrompt=function'),compactContext);assert.equal(compactContext.compactAnalysisPayload(analysis).notPostedPlans[0].postId,'post-3');
