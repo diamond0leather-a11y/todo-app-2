@@ -1,0 +1,38 @@
+const assert=require('node:assert/strict');
+const fs=require('node:fs');
+const path=require('node:path');
+const vm=require('node:vm');
+const root=__dirname;
+const source=fs.readFileSync(path.join(root,'daily-cycle.js'),'utf8');
+const published=fs.readFileSync(path.join(root,'dist/index.html'),'utf8');
+const between=(text,start,end)=>{const a=text.indexOf(start),b=text.indexOf(end,a);assert(a>=0&&b>a,`missing ${start}`);return text.slice(a,b);};
+const helper=between(source,'function reviewCalendarTasks(date,selected=false){','primaryRecord=function');
+assert(published.includes(helper),'published calendar task logic must match source');
+assert(published.includes('if(d.workReviewDate){reviewDate=d.workReviewDate;renderReviewWork();}'),'calendar date must open the selected review date');
+const render=between(published,'renderReviewWork=function(){const tasks=homeReviewFilter?','const dailyActualEdit=editActual;');
+const post={id:'day10',date:'2026-09-16',actualAt:'2026-09-15T10:00:00.000Z',skuIds:['naki-navy'],actualSnapshot:{skuIds:['berry']}};
+const saved={postId:'day10',stage:'7d',saves:8,reach:null,commentContents:['確認済み'],observedAt:'2026-09-23T18:00'};
+const state={posts:[post],records:{'day10|7d':saved}};
+function run(loaded){
+ const active=loaded.posts[0];
+ const tasks=[{p:active,stage:'24h',key:'day10|24h',due:'2026-09-16'},{p:active,stage:'7d',key:'day10|7d',due:'2026-09-23'}];
+ const elements=new Map();
+ const context={demo:loaded,Date,TODAY:'2026-09-29',reviewDate:'2026-09-16',reviewMonth:'2026-09',homeReviewFilter:null,allTasks:()=>tasks,dueTasks:date=>tasks.filter(task=>task.due===date),homeReviewTasks:()=>[],jstDate:value=>String(value).slice(0,10),dx:selector=>{if(!elements.has(selector))elements.set(selector,{innerHTML:'',value:''});return elements.get(selector);},datesInMonth:()=>Array.from({length:30},(_,i)=>`2026-09-${String(i+1).padStart(2,'0')}`),taskWorkCard:task=>`<article><button data-work-record="${task.key}">${loaded.records[task.key]?'保存済み7dを確認・修正':'数字を入力'}</button></article>`,short:value=>value,html:value=>value,recordState:task=>loaded.records[task.key]?'入力済み':'未入力',renderReviewWork:()=>{}};
+ vm.runInNewContext(helper+render,context);
+ assert.deepEqual(Array.from(context.reviewCalendarTasks('2026-09-16'),task=>task.key),['day10|24h','day10|7d']);
+ assert.deepEqual(Array.from(context.reviewCalendarTasks('2026-09-23'),task=>task.key),['day10|7d'],'due date remains available without duplication');
+ context.renderReviewWork();
+ const list=elements.get('#todayRecordsWork').innerHTML,calendar=elements.get('#reviewCalendarWork').innerHTML;
+ assert(list.includes('data-work-record="day10|7d"')&&list.includes('保存済み7dを確認・修正'));
+ assert(list.includes('data-work-record="day10|24h"'));
+ assert(calendar.includes('<strong>16</strong><small>24h 未</small><small>7d 済</small>'));
+ assert.equal(loaded.records['day10|24h'],undefined);
+ assert.equal(loaded.records['day10|7d'].saves,8);
+ assert.equal(loaded.records['day10|7d'].commentContents[0],'確認済み');
+ assert.equal(loaded.posts[0].skuIds[0],'naki-navy');
+ assert.equal(loaded.posts[0].actualSnapshot.skuIds[0],'berry');
+ return context;
+}
+run(state);
+run(JSON.parse(JSON.stringify(state)));
+console.log('PASS 9/16 calendar: 24h 未 + saved 7d edit route, actual SKU, reload, no record duplication');
