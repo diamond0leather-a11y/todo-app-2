@@ -1,7 +1,6 @@
 // Story・販売管理。既存ID・実績・手動編集を維持する追加層。
 demo.salesHistory ||= [];
 demo.salePlans ||= {};
-if(!demo.storySalesVersion&&!demo.salesHistory.length){demo.salesHistory.push({id:'sale-history-demo-202605',date:'2026-05-10',time:'21:00',skuIds:demo.skus.slice(0,3).map(s=>s.id),sample:true,enteredAt:nowISO()});}
 function addMonths(month,n=4){const [y,m]=month.split('-').map(Number),d=new Date(Date.UTC(y,m-1+n,1));return d.toISOString().slice(0,7);}
 function saleCycle(id){const history=demo.salesHistory.filter(h=>h.skuIds.includes(id)).sort((a,b)=>a.date.localeCompare(b.date));const last=history.at(-1)?.date;const suggested=last?addMonths(last.slice(0,7)):null;return {last,suggested,next:demo.salePlans[id]?.month||suggested,manual:!!demo.salePlans[id]?.month,history};}
 function saleLine(id,date){return demo.months[date.slice(0,7)]?.lineup.find(l=>l.skuId===id);}
