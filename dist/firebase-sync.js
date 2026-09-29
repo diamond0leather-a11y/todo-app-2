@@ -91,9 +91,19 @@ function conflictingFields(base,local,remote,path=''){
  if(Array.isArray(local)&&Array.isArray(remote)&&Array.isArray(base)&&base.length===local.length&&base.length===remote.length)return local.flatMap((value,index)=>conflictingFields(base[index],value,remote[index],`${path}[${index}]`));
  return [path||'(document)'];
 }
+function diagnosticEqual(a,b){
+ if(Object.is(a,b))return true;
+ if(!a||!b||typeof a!=='object'||typeof b!=='object'||Array.isArray(a)!==Array.isArray(b))return false;
+ if(Array.isArray(a))return a.length===b.length&&a.every((value,index)=>diagnosticEqual(value,b[index]));
+ const keys=Object.keys(a),other=Object.keys(b);return keys.length===other.length&&keys.every(key=>Object.prototype.hasOwnProperty.call(b,key)&&diagnosticEqual(a[key],b[key]));
+}
+function shotStructure(shots){
+ return Array.isArray(shots)?shots.map((shot,index)=>({index,id:typeof shot?.id==='string'?shot.id:null,media:['写真','動画'].includes(shot?.media)?shot.media:shot?.media==null?null:'other',keys:shot&&typeof shot==='object'?Object.keys(shot).sort():[]})):[];
+}
 function logConflict(key,stage,reason,fields,base,local,current){
  if(!key.startsWith('posts/'))return;
- console.error('[TODO2_SYNC_CONFLICT]',{postId:local?.value?.id||current?.value?.id||base?.value?.id||null,date:local?.value?.date||current?.value?.date||base?.value?.date||null,stage,fields,baselineRevision:base?.value?.revision??null,localRevision:local?.value?.revision??null,firestoreRevision:current?.value?.revision??null,documentVersion:current?.version??null,reason});
+ const baselineShots=base?.value?.shots,localShots=local?.value?.shots,firestoreShots=current?.value?.shots;
+ console.error('[TODO2_SYNC_CONFLICT]',{postId:local?.value?.id||current?.value?.id||base?.value?.id||null,date:local?.value?.date||current?.value?.date||base?.value?.date||null,stage,fields,baselineRevision:base?.value?.revision??null,localRevision:local?.value?.revision??null,firestoreRevision:current?.value?.revision??null,baselineDocumentVersion:base?.version??null,documentVersion:current?.version??null,reason,shots:{baseline:{count:Array.isArray(baselineShots)?baselineShots.length:null,structure:shotStructure(baselineShots)},firestore:{count:Array.isArray(firestoreShots)?firestoreShots.length:null,structure:shotStructure(firestoreShots)},local:{count:Array.isArray(localShots)?localShots.length:null,structure:shotStructure(localShots)},deepEqual:{baselineFirestore:diagnosticEqual(baselineShots,firestoreShots),baselineLocal:diagnosticEqual(baselineShots,localShots),firestoreLocal:diagnosticEqual(firestoreShots,localShots)},serializedEqual:{baselineFirestore:same(baselineShots,firestoreShots),baselineLocal:same(baselineShots,localShots),firestoreLocal:same(firestoreShots,localShots)}}});
 }
 
 async function safeWrite(key,payload,base,generation,uid){
