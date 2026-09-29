@@ -84,10 +84,24 @@ function mergeValue(base,local,remote){
  throw Error('sync-conflict');
 }
 
+function conflictingFields(base,local,remote,path=''){
+ if(same(base,local)||same(base,remote)||same(local,remote))return [];
+ const object=value=>value&&typeof value==='object'&&!Array.isArray(value);
+ if(object(local)&&object(remote)&&(object(base)||base===undefined))return [...new Set([...Object.keys(base||{}),...Object.keys(local)])].flatMap(key=>conflictingFields(base?.[key],local[key],remote[key],path?path+'.'+key:key));
+ if(Array.isArray(local)&&Array.isArray(remote)&&Array.isArray(base)&&base.length===local.length&&base.length===remote.length)return local.flatMap((value,index)=>conflictingFields(base[index],value,remote[index],`${path}[${index}]`));
+ return [path||'(document)'];
+}
+function logConflict(key,stage,reason,fields,base,local,current){
+ if(!key.startsWith('posts/'))return;
+ console.error('[TODO2_SYNC_CONFLICT]',{postId:local?.value?.id||current?.value?.id||base?.value?.id||null,date:local?.value?.date||current?.value?.date||base?.value?.date||null,stage,fields,baselineRevision:base?.value?.revision??null,localRevision:local?.value?.revision??null,firestoreRevision:current?.value?.revision??null,documentVersion:current?.version??null,reason});
+}
+
 async function safeWrite(key,payload,base,generation,uid){
  const [group,id]=key.split('/'),ref=doc(workspace,group,id);
  if(generation!==authGeneration)throw Error('session-ended');
- const saved=await runTransaction(db,async tx=>{const snap=await tx.get(ref),current=snap.exists()?snap.data():null;if(generation!==authGeneration)throw Error('session-ended');if(group==='posts'&&current?.value&&((current.value.actualAt&&!base?.value?.actualAt)||(current.value.actualSnapshot&&!base?.value?.actualSnapshot)))throw Error('sync-conflict');if(payload.deleted&&current&&!same(base?.value,current.value))throw Error('sync-conflict');const value=payload.deleted?undefined:mergeValue(base?.value,payload.value,current?.value);if(group==='posts'&&value&&base?.value&&current?.value&&!same(base.value,current.value)&&!same(payload.value,current.value))value.revision=Math.max(current.value.revision||0,payload.value.revision||0)+1;const next={...payload,...(payload.deleted?{}:{value}),version:(current?.version||0)+1,updatedAt:serverTimestamp(),updatedBy:uid};tx.set(ref,next);return {...next,updatedAt:undefined,updatedBy:undefined};});if(generation===authGeneration)remoteDocs.set(key,saved);return saved;
+ let conflict=null;
+ try{const saved=await runTransaction(db,async tx=>{const snap=await tx.get(ref),current=snap.exists()?snap.data():null;if(generation!==authGeneration)throw Error('session-ended');if(group==='posts'&&current?.value&&((current.value.actualAt&&!base?.value?.actualAt)||(current.value.actualSnapshot&&!base?.value?.actualSnapshot))){conflict={current,reason:'保護条件',fields:['actualAt','actualSnapshot'].filter(field=>current.value[field]&&!base?.value?.[field])};throw Error('sync-conflict');}if(payload.deleted&&current&&!same(base?.value,current.value)){conflict={current,reason:'削除対象の変更',fields:conflictingFields(base?.value,payload.value,current.value)};throw Error('sync-conflict');}let value;try{value=payload.deleted?undefined:mergeValue(base?.value,payload.value,current?.value);}catch(error){if(error.message==='sync-conflict')conflict={current,reason:'mergeValue統合不能',fields:conflictingFields(base?.value,payload.value,current?.value)};throw error;}if(group==='posts'&&value&&base?.value&&current?.value&&!same(base.value,current.value)&&!same(payload.value,current.value))value.revision=Math.max(current.value.revision||0,payload.value.revision||0)+1;const next={...payload,...(payload.deleted?{}:{value}),version:(current?.version||0)+1,updatedAt:serverTimestamp(),updatedBy:uid};tx.set(ref,next);return {...next,updatedAt:undefined,updatedBy:undefined};});if(generation===authGeneration)remoteDocs.set(key,saved);return saved;}
+ catch(error){if(error.message==='sync-conflict')logConflict(key,'初回transaction',conflict?.reason||'その他',conflict?.fields||['(unknown)'],base,payload,conflict?.current);throw error;}
 }
 
 async function rebaseConflicts(state){
@@ -95,9 +109,9 @@ async function rebaseConflicts(state){
  const entries=splitState(state),resolved=[];
  for(const [key,base] of conflictBases){
   const [group,id]=key.split('/'),snap=await getDoc(doc(workspace,group,id)),current=snap.exists()?snap.data():null,local=entries.get(key);
-  if(!local||!current||current.deleted)throw Error('sync-conflict');
-  if(group==='posts'&&current.value&&((current.value.actualAt&&!base?.value?.actualAt)||(current.value.actualSnapshot&&!base?.value?.actualSnapshot)))throw Error('sync-conflict');
-  const value=mergeValue(base?.value,local.value,current.value);
+  if(!local||!current||current.deleted){logConflict(key,'再試行時の再評価','対象投稿がない／削除済み',['(document)'],base,local,current);throw Error('sync-conflict');}
+  if(group==='posts'&&current.value&&((current.value.actualAt&&!base?.value?.actualAt)||(current.value.actualSnapshot&&!base?.value?.actualSnapshot))){logConflict(key,'再試行時の再評価','保護条件',['actualAt','actualSnapshot'].filter(field=>current.value[field]&&!base?.value?.[field]),base,local,current);throw Error('sync-conflict');}
+  let value;try{value=mergeValue(base?.value,local.value,current.value);}catch(error){if(error.message==='sync-conflict')logConflict(key,'再試行時の再評価','mergeValue統合不能',conflictingFields(base?.value,local.value,current.value),base,local,current);throw error;}
   resolved.push([key,{...local,value},{...current,updatedAt:undefined,updatedBy:undefined}]);
  }
  for(const [key,local,remote] of resolved){entries.set(key,local);remoteDocs.set(key,remote);localBaseline.set(key,clean(remote));conflictBases.delete(key);}
