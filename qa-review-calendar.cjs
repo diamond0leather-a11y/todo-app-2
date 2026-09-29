@@ -8,7 +8,7 @@ const published=fs.readFileSync(path.join(root,'dist/index.html'),'utf8');
 const sync=fs.readFileSync(path.join(root,'dist/firebase-sync.js'),'utf8');
 const between=(text,start,end)=>{const a=text.indexOf(start),b=text.indexOf(end,a);assert(a>=0&&b>a,`missing ${start}`);return text.slice(a,b);};
 const helper=between(source,'function reviewCalendarTasks(date,selected=false){','primaryRecord=function');
-const handler=between(source,"document.addEventListener('click',e=>{const button=e.target.closest('[data-work-review-date]');",'\n');
+const handler=between(source,"document.addEventListener('click',e=>{const correction=e.target.closest('[data-work-no-post-correct]');",'\n');
 assert(published.includes(helper),'calendar task selection differs from public app');
 assert(published.includes(handler),'calendar click handler differs from public app');
 const render=between(published,'renderReviewWork=function(){const tasks=homeReviewFilter?','const dailyActualEdit=editActual;');
@@ -31,7 +31,7 @@ function run(loaded){
  context.renderReviewWork();
  assert(elements.get('#reviewCalendarWork').innerHTML.includes('<strong>16</strong><small>24h 未</small><small>7d 済</small>'));
  const click=listeners.find(entry=>entry.capture)?.fn;assert(click,'calendar capture handler');
- click({target:{closest:()=>({dataset:{workReviewDate:'2026-09-16'}})},preventDefault(){prevented=true;},stopImmediatePropagation(){stopped=true;}});
+ click({target:{closest:selector=>selector==='[data-work-review-date]'?{dataset:{workReviewDate:'2026-09-16'}}:null},preventDefault(){prevented=true;},stopImmediatePropagation(){stopped=true;}});
  assert(prevented&&stopped);assert.equal(context.reviewDate,'2026-09-16');assert.equal(context.homeReviewFilter,null);
  assert(elements.get('#todayRecordsWork').innerHTML.includes('data-work-record="day10|7d"'));
  assert(formBody.includes('saves=8;')&&formBody.includes('reach=;'),'saved 7d values restored');
