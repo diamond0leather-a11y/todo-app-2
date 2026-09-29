@@ -1469,7 +1469,7 @@ editSale=function(){const m=monthInfo(monthCursor);
   const date=f.get('date');if(date&&date.slice(0,7)!==monthCursor)throw Error('表示中の月の販売日を入力してください');
   const ids=f.getAll('skuIds'),inactive={...(m.lineupInactive||{})},lines=ids.map(id=>({...inactive[id],...m.lineup.find(l=>l.skuId===id),skuId:id,saleKind:f.get('kind-'+id)||'未設定'}));
   if(lines.some(l=>l.saleKind==='新発売'||l.saleKind==='再販')&&!date)throw Error('新発売・再販の共通販売日を入力してください');
-  for(const l of lines)if(!m.lineup.some(old=>old.skuId===l.skuId)&&(l.saleKind==='新発売'||l.saleKind==='再販'))demo.salePlans[l.skuId]={month:monthCursor,updatedAt:nowISO()};
+  for(const l of lines)if(!m.lineup.some(old=>old.skuId===l.skuId)&&(l.saleKind==='新発売'||l.saleKind==='再販')&&!demo.salePlans[l.skuId]?.month)demo.salePlans[l.skuId]={month:monthCursor,updatedAt:nowISO()};
   for(const l of m.lineup)if(!ids.includes(l.skuId))inactive[l.skuId]=l;
   for(const id of ids)delete inactive[id];
   m.date=date;m.time=f.get('time');m.lineup=lines;m.lineupInactive=inactive;

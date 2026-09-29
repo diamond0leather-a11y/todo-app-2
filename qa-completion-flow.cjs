@@ -60,6 +60,29 @@ function salesHarness(source){
 const sourceState=salesHarness(daily);
 salesHarness(html);
 
+// Adding a SKU to a monthly lineup must not replace a manually chosen next sale month.
+function nextSaleMonthHarness(source){
+ const code=between(source,'editSale=function(){','const currentStatus=')+'}';
+ const demo={months:{'2026-10':{date:'',time:'21:00',lineup:[]}},salePlans:{a:{month:'2027-01',updatedAt:'existing'}},skus:[{id:'a',restockDate:'2027-01-12'},{id:'b',restockDate:'2026-11-03'}],salesHistory:[{id:'sale-a',date:'2026-09-01',skuIds:['a']}]};
+ const originalSkus=structuredClone(demo.skus),originalHistory=structuredClone(demo.salesHistory);
+ let save;
+ const ctx={demo,monthCursor:'2026-10',monthInfo:month=>demo.months[month],openForm:(_title,_body,callback)=>{save=callback;},formInput:()=>'',salePickerFilters:()=>'',skuPickerWork:()=>'',nowISO:()=> '2026-10-01T00:00:00Z'};
+ vm.runInNewContext(code,ctx);
+ ctx.editSale();
+ save({get:key=>({'date':'2026-10-04','time':'21:00','kind-a':'再販','kind-b':'新発売'})[key]||'',getAll:key=>key==='skuIds'?['a','b']:[]});
+ assert.equal(demo.salePlans.a.month,'2027-01','manual next month is retained');
+ assert.equal(demo.salePlans.a.updatedAt,'existing','manual plan is not rewritten');
+ assert.equal(demo.salePlans.b.month,'2026-10','unset next month gets the existing monthly default');
+ assert.deepEqual(demo.skus,originalSkus,'restock dates and SKU IDs are unchanged');
+ assert.deepEqual(demo.salesHistory,originalHistory,'sales history is unchanged');
+ const reloaded=JSON.parse(JSON.stringify(demo));
+ assert.equal(reloaded.salePlans.a.month,'2027-01');
+ assert.equal(reloaded.salePlans.b.month,'2026-10');
+ assert.deepEqual(reloaded.skus,originalSkus);
+}
+nextSaleMonthHarness(fs.readFileSync(path.join(root,'story-sales.js'),'utf8'));
+nextSaleMonthHarness(html);
+
 // The same complete state is split for sharing and rejoined from mock Firestore documents.
 const sharedCode=between(sync,'function splitState(state){','async function readWorkspace()');
 const share=new Function('state','clean','safeId',sharedCode+'\nconst docs=splitState(state);return {docs,reloaded:joinState(docs)};');
