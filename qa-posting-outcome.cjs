@@ -3,7 +3,7 @@ const fs=require('node:fs');
 const vm=require('node:vm');
 const path=require('node:path');
 const root=__dirname;
-const read=file=>fs.readFileSync(path.join(root,file),'utf8');
+const read=file=>fs.readFileSync(path.join(root,file),'utf8').replace(/\r\n/g,'\n');
 const axis=read('three-axis.js'),daily=read('daily-cycle.js'),editorial=read('dist/chatgpt-editorial.js'),sync=read('dist/firebase-sync.js'),published=read('dist/index.html');
 const between=(source,start,end)=>{const a=source.indexOf(start),b=source.indexOf(end,a);assert(a>=0&&b>a,`missing ${start}`);return source.slice(a,b);};
 for(const start of ['const postingStatusDetail=showPost;','const postingStatusActualEdit=editActual;','const compactPostingStatus=compactAnalysisPayload;'])assert(published.includes(between(axis,start,start==='const postingStatusDetail=showPost;'?'function editConcept':start==='const postingStatusActualEdit=editActual;'?'function reviewActualChoice':'exportPrompt=function')));
