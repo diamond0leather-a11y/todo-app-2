@@ -9,11 +9,12 @@ const between=(source,start,end)=>{const a=source.indexOf(start),b=source.indexO
 for(const start of ['const postingStatusDetail=showPost;','const postingStatusActualEdit=editActual;','const compactPostingStatus=compactAnalysisPayload;'])assert(published.includes(between(axis,start,start==='const postingStatusDetail=showPost;'?'function editConcept':start==='const postingStatusActualEdit=editActual;'?'function reviewActualChoice':'exportPrompt=function')));
 assert(published.includes(between(axis,'function reviewActualRecord(key,recordForm){','const originalPayload=')));
 assert(published.includes(between(daily,'const dailyReviewRecordForm=editRecord;','const recordedSevenDayCard=')));
+assert(published.includes(between(daily,'editRecord=function(key){','function numberOrBlank(raw){')),'published 7d/24h form must match daily-cycle.js');
 assert(!daily.includes('const actualProductRecordForm=editRecord;'),'saved 7d must not add a duplicate SKU picker');
 
 const planned='naki-navy',actual='berry';
 const post={id:'post-1',date:'2026-09-10',theme:'予定テーマ',format:'Feed',caption:'予定本文',primaryAxis:'BUSINESS',parentId:'planned-parent',skuIds:[planned],revision:2,actualAt:'2026-09-10T09:00:00.000Z',actualSnapshot:{theme:'実際のテーマ',derivedTheme:'実際のテーマ',format:'Reel',caption:'実際の本文',primaryAxis:'CUSTOMER_VALUE',parentId:'actual-parent',skuIds:[actual],advertised:true,confirmedAt:'2026-09-10T10:00:00.000Z',sequence:[{order:2}],stories:[{text:'予定Story'}],cta:'予定CTA',takeaway:'予定の伝えること',shots:[{id:'planned-shot'}],hook:'予定hook'},stories:[{text:'予定Story'}],sequence:[{order:2}],cta:'予定CTA',takeaway:'予定の伝えること'};
-const demo={posts:[post],records:{'post-1|7d':{postId:'post-1',stage:'7d',saves:0,reach:null,observedAt:'2026-09-17T18:00'},'post-1|24h':{postId:'post-1',stage:'24h',saves:1}},skus:[{id:planned},{id:actual}],reactions:[],ads:[]};
+const demo={posts:[post],records:{'post-1|7d':{postId:'post-1',stage:'7d',saves:0,reach:null,observedAt:'2026-09-17T18:00',voices:['保存済みの声'],meaning:{CUSTOMER_VALUE:'以前の意味づけ'}},'post-1|24h':{postId:'post-1',stage:'24h',saves:1}},skus:[{id:planned},{id:actual}],reactions:[],ads:[]};
 let formBody='',saveForm;
 const context={demo,JSON,Error,structuredClone,html:x=>x,skuLabel:id=>id,sku:id=>demo.skus.find(s=>s.id===id),skuPickerWork:ids=>`picker:${ids.join(',')}`,allTasks:()=>[{p:post,stage:'7d',key:'post-1|7d'}],formInput:(_label,key,value)=>`${key}=${value};`,formSelect:(_label,key,_options,value)=>`${key}=${value};`,formats:{Feed:'Feed',Reel:'Reel'},AXES:{CUSTOMER_VALUE:'価値',BUSINESS:'販売'},OFFICIAL_TOPICS:[{id:'actual-parent',group:'CUSTOMER'}],jstDate:()=> '2026-09-10',nowISO:()=> '2026-09-18T00:00:00.000Z',dx:()=>({insertAdjacentHTML(){},elements:{reviewActualChoice:[{addEventListener(){}}]}}),openForm:(_title,body,save)=>{formBody=body;saveForm=save;},editRecord:key=>context.openForm('7d','saved:'+demo.records[key].saves,f=>{demo.records[key]={...demo.records[key],saves:Number(f.get('saves'))};})};
 vm.runInNewContext(between(axis,'function reviewActualChoice(p,f){','const originalPayload='),context);
@@ -38,8 +39,18 @@ context.reviewActualRecord('post-1|7d',context.editRecord);assert(formBody.inclu
 const reviewContext={demo,editRecord:()=>{},allTasks:context.allTasks,actualPost:p=>({...p,...p.actualSnapshot}),openForm:(_title,body,save)=>{formBody=body;saveForm=save;},planDay:x=>x,jstDate:x=>String(x).slice(0,10),formats:{Feed:'Feed',Reel:'Reel'},html:x=>x,postLabel:p=>p.skuIds.join(' + '),RESULT_METRICS:{saves:'保存',reach:'リーチ'},formInput:(label,key,value)=>`${label}:${key}=${value};`,AXES:{CUSTOMER_VALUE:'価値'},jstInput:()=> '2026-09-17T18:00',nowISO:()=> '2026-09-18T00:00:00.000Z',captureBand:()=> '期間内',numberOrBlank:raw=>raw===''?null:Number(raw),emptyVoice:()=>({}),Date};
 vm.runInNewContext(between(daily,'editRecord=function(key){','function numberOrBlank(raw){'),reviewContext);
 reviewContext.editRecord('post-1|7d');assert(formBody.includes('saves=4;')&&formBody.includes('reach=;'));
-saveForm({get:key=>({saves:'6',reach:'',observedAt:'2026-09-17T18:00',commentContents:'',voices:'','meaning-CUSTOMER_VALUE':''})[key]??'',has:()=>false});
+for(const removed of ['Instagramを確認した日時','meaning-CUSTOMER_VALUE','DM・質問・要望'])assert(!formBody.includes(removed),removed);
+saveForm({get:key=>({saves:'6',reach:'',observedAt:'2099-01-01T00:00',commentContents:'新しいコメント',voices:'上書き禁止','meaning-CUSTOMER_VALUE':'上書き禁止'})[key]??'',has:()=>false});
 assert.equal(demo.records['post-1|7d'].saves,6);assert.equal(demo.records['post-1|7d'].reach,null);assert.equal(Object.keys(demo.records).length,2);assert.equal(demo.records['post-1|24h'].saves,1);
+assert.equal(demo.records['post-1|7d'].observedAt,'2026-09-17T18:00');assert.equal(demo.records['post-1|7d'].enteredAt,'2026-09-18T00:00:00.000Z');
+assert.equal(demo.records['post-1|7d'].meaning.CUSTOMER_VALUE,'以前の意味づけ');assert.equal(demo.records['post-1|7d'].voices[0],'保存済みの声');assert.equal(demo.records['post-1|7d'].commentContents[0],'新しいコメント');assert.equal(demo.reactions.length,0);
+const savedSeven=demo.records['post-1|7d'];delete demo.records['post-1|7d'];
+reviewContext.editRecord('post-1|7d');saveForm({get:key=>({saves:'0',reach:'',commentContents:''})[key]??'',has:()=>false});
+assert.equal(demo.records['post-1|7d'].observedAt,'2026-09-17T18:00');assert.equal(demo.records['post-1|7d'].saves,0);assert.equal(demo.records['post-1|7d'].reach,null);
+demo.records['post-1|7d']=savedSeven;
+reviewContext.allTasks=()=>[{p:post,stage:'24h',key:'post-1|24h'}];
+reviewContext.editRecord('post-1|24h');assert(formBody.includes('Instagramを確認した日時')&&formBody.includes('DM・質問・要望'));
+reviewContext.allTasks=context.allTasks;
 
 let detail='',editSave,clickHandler,persisted=0;
 const noPost={id:'post-2',date:'2026-09-12',skuIds:[planned],revision:1,theme:'予定',caption:'予定本文',format:'Feed',stories:[]};demo.posts.push(noPost);
@@ -81,6 +92,10 @@ assert.equal(joined.posts.find(p=>p.id==='post-1').actualSnapshot.stories.length
 assert.equal(joined.posts.find(p=>p.id==='post-1').actualSnapshot.sequence.length,0);
 assert.equal(joined.posts.find(p=>p.id==='post-3').noPostConfirmedAt,missed.noPostConfirmedAt);
 assert.equal(joined.records['post-1|7d'].saves,6);
+assert.equal(joined.records['post-1|7d'].observedAt,'2026-09-17T18:00');
+assert.equal(joined.records['post-1|7d'].enteredAt,'2026-09-18T00:00:00.000Z');
+assert.equal(joined.records['post-1|7d'].meaning.CUSTOMER_VALUE,'以前の意味づけ');
+assert.equal(joined.records['post-1|7d'].voices[0],'保存済みの声');
 assert.equal(Object.keys(joined.records).length,2);
 demo.skus.push({id:'another-actual'});
 context.reviewActualRecord('post-1|7d',context.editRecord);
