@@ -2,7 +2,7 @@ const assert=require('node:assert/strict');
 const fs=require('node:fs');
 const vm=require('node:vm');
 const path=require('node:path');
-const read=name=>fs.readFileSync(path.join(__dirname,name),'utf8');
+const read=name=>fs.readFileSync(path.join(__dirname,name),'utf8').replace(/\r\n/g,'\n');
 const axis=read('three-axis.js'),daily=read('daily-cycle.js'),published=read('dist/index.html'),editorial=read('dist/chatgpt-editorial.js'),sync=read('dist/firebase-sync.js');
 const section=(text,start,end)=>{const a=text.indexOf(start),b=text.indexOf(end,a);assert(a>=0&&b>a,start);return text.slice(a,b);};
 for(const block of [section(axis,'function reviewActualChoice(p,f){','const originalPayload='),section(daily,"const captureWindows={'24h'",'recordState=function'),daily.slice(daily.indexOf('function noPostCalendarDate(p){'))])assert(published.includes(block));
@@ -25,7 +25,7 @@ run('const dailyReviewRecordForm=editRecord;editRecord=key=>reviewActualRecord(k
 run(daily.slice(daily.indexOf('function noPostCalendarDate(p){')));
 const task=context.allTasks().find(t=>t.stage==='7d');assert(task);assert.equal(context.recordState(task),'期限超過');
 assert(context.dailyInputs(new Date('2026-09-29T00:00:00.000Z').getTime()).some(x=>x.recordKey==='day12|7d'));
-context.editRecord(task.key);assert(formBody.includes('この日は投稿していない'));
+context.editRecord(task.key);assert(formBody.includes('この日は投稿していない'));assert.match(formBody,/value="later" checked/,'unconfirmed actual content keeps the existing default');
 const select=(choice,values={})=>({get:key=>key==='reviewActualChoice'?choice:values[key]??'',getAll:key=>key==='skuIds'?['berry']:[],has:()=>false});
 saveForm(select('no-post'));context.persist();context.refreshWork();
 assert(post.noPostConfirmedAt);assert.equal(post.noPostDate,'2026-09-18');assert.equal(post.date,'2026-09-11');

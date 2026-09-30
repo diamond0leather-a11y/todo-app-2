@@ -3,8 +3,8 @@ const fs=require('node:fs');
 const path=require('node:path');
 const vm=require('node:vm');
 const root=__dirname;
-const source=fs.readFileSync(path.join(root,'daily-cycle.js'),'utf8');
-const published=fs.readFileSync(path.join(root,'dist/index.html'),'utf8');
+const source=fs.readFileSync(path.join(root,'daily-cycle.js'),'utf8').replace(/\r\n/g,'\n');
+const published=fs.readFileSync(path.join(root,'dist/index.html'),'utf8').replace(/\r\n/g,'\n');
 const sync=fs.readFileSync(path.join(root,'dist/firebase-sync.js'),'utf8');
 const between=(text,start,end)=>{const a=text.indexOf(start),b=text.indexOf(end,a);assert(a>=0&&b>a,`missing ${start}`);return text.slice(a,b);};
 const helper=between(source,'function reviewCalendarTasks(date,selected=false){','primaryRecord=function');
@@ -13,7 +13,7 @@ assert(published.includes(helper),'calendar task selection differs from public a
 assert(published.includes(handler),'calendar click handler differs from public app');
 const render=between(published,'renderReviewWork=function(){const tasks=homeReviewFilter?','const dailyActualEdit=editActual;');
 const recordEditor=between(source,'editRecord=function(key){','function numberOrBlank(raw){');
-const productEditor=between(source,'const actualProductRecordForm=editRecord;','const recordedSevenDayCard=');
+const actualEditor=between(published,'function reviewActualChoice(p,f){','const originalPayload=');
 const picker=between(published,'function skuPickerWork(selected=[]','function saveInlineStatuses(f){');
 const shared=vm.runInNewContext("const clean=value=>JSON.parse(JSON.stringify(value));const safeId=value=>encodeURIComponent(String(value)).replaceAll('%2F','%252F');"+between(sync,'function splitState(state){','async function readWorkspace(){')+'\n({splitState,joinState})',{});
 
@@ -24,8 +24,9 @@ const state={posts:[post,{id:'not-posted',date:'2026-09-17',noPostConfirmedAt:'2
 function run(loaded){
  const active=loaded.posts[0],tasks=[{p:active,stage:'24h',key:'day10|24h',due:'2026-09-16'},{p:active,stage:'7d',key:'day10|7d',due:'2026-09-23'}];
  const elements=new Map(),listeners=[];let formBody='',saveForm,prevented=false,stopped=false;
- const context={demo:loaded,Date,TODAY:'2026-09-29',reviewDate:'2026-09-29',reviewMonth:'2026-09',homeReviewFilter:'期限超過',allTasks:()=>tasks,dueTasks:date=>tasks.filter(task=>task.due===date),homeReviewTasks:()=>[],jstDate:value=>new Date(new Date(value).getTime()+9*3600000).toISOString().slice(0,10),dx:selector=>{if(!elements.has(selector))elements.set(selector,{innerHTML:'',value:'',scrollIntoView(){}});return elements.get(selector);},datesInMonth:()=>Array.from({length:30},(_,i)=>`2026-09-${String(i+1).padStart(2,'0')}`),taskWorkCard:task=>`<article><button data-work-record="${task.key}">${loaded.records[task.key]?'保存済み7dを確認・修正':'数字を入力'}</button></article>`,short:value=>value,html:value=>value,recordState:task=>loaded.records[task.key]?'入力済み':'未入力',renderReviewWork:()=>{},editRecord:()=>{},openForm:(_title,body,save)=>{formBody=body;saveForm=save;},document:{addEventListener:(_event,fn,capture)=>listeners.push({fn,capture})},formats:{Feed:'Feed',Reel:'Reel'},planDay:value=>value,actualPost:p=>({...p,...p.actualSnapshot}),postLabel:p=>p.skuIds.join(' + '),RESULT_METRICS:{saves:'保存',reach:'リーチ'},formInput:(label,key,value)=>`${label}:${key}=${value};`,AXES:{CUSTOMER_VALUE:'価値'},jstInput:()=> '2026-09-23T18:00',nowISO:()=> '2026-09-29T00:00:00.000Z',captureBand:()=> '期間内',numberOrBlank:raw=>raw===''?null:Number(raw),emptyVoice:()=>({}),sku:id=>loaded.skus.find(s=>s.id===id),skuLabel:id=>id,stateBadge:()=>''};
- vm.runInNewContext(helper+render+recordEditor+picker+productEditor+between(source,'function noPostCalendarDate(p){','const noPostCalendarRender=renderReviewWork;')+handler,context);
+ const context={demo:loaded,Date,structuredClone,TODAY:'2026-09-29',reviewDate:'2026-09-29',reviewMonth:'2026-09',homeReviewFilter:'期限超過',allTasks:()=>tasks,dueTasks:date=>tasks.filter(task=>task.due===date),homeReviewTasks:()=>[],jstDate:value=>new Date(new Date(value).getTime()+9*3600000).toISOString().slice(0,10),dx:selector=>{if(!elements.has(selector))elements.set(selector,{innerHTML:'',value:'',insertAdjacentHTML(){},elements:{reviewActualChoice:[{addEventListener(){}}]},scrollIntoView(){}});return elements.get(selector);},datesInMonth:()=>Array.from({length:30},(_,i)=>`2026-09-${String(i+1).padStart(2,'0')}`),taskWorkCard:task=>`<article><button data-work-record="${task.key}">${loaded.records[task.key]?'保存済み7dを確認・修正':'数字を入力'}</button></article>`,short:value=>value,html:value=>value,recordState:task=>loaded.records[task.key]?'入力済み':'未入力',renderReviewWork:()=>{},editRecord:()=>{},openForm:(_title,body,save)=>{formBody=body;saveForm=save;},document:{addEventListener:(_event,fn,capture)=>listeners.push({fn,capture})},formats:{Feed:'Feed',Reel:'Reel'},planDay:value=>value,actualPost:p=>({...p,...p.actualSnapshot}),postLabel:p=>p.skuIds.join(' + '),RESULT_METRICS:{saves:'保存',reach:'リーチ'},formInput:(label,key,value)=>`${label}:${key}=${value};`,formSelect:(label,key,_options,value)=>`${label}:${key}=${value};`,OFFICIAL_TOPICS:[],AXES:{CUSTOMER_VALUE:'価値'},jstInput:()=> '2026-09-23T18:00',nowISO:()=> '2026-09-29T00:00:00.000Z',captureBand:()=> '期間内',numberOrBlank:raw=>raw===''?null:Number(raw),emptyVoice:()=>({}),sku:id=>loaded.skus.find(s=>s.id===id),skuLabel:id=>id,stateBadge:()=>''};
+ vm.runInNewContext(helper+render+recordEditor+picker+actualEditor+between(source,'function noPostCalendarDate(p){','const noPostCalendarRender=renderReviewWork;')+handler,context);
+ vm.runInNewContext('const dailyReviewRecordForm=editRecord;editRecord=key=>reviewActualRecord(key,dailyReviewRecordForm);',context);
  assert.deepEqual(Array.from(context.reviewCalendarTasks('2026-09-16'),task=>task.key),['day10|24h','day10|7d']);
  assert.deepEqual(Array.from(context.reviewCalendarTasks('2026-09-23'),task=>task.key),['day10|7d']);
  context.renderReviewWork();
@@ -36,9 +37,9 @@ function run(loaded){
  assert(elements.get('#todayRecordsWork').innerHTML.includes('data-work-record="day10|7d"'));
  assert(formBody.includes('saves=8;')&&formBody.includes('reach=;'),'saved 7d values restored');
  assert(formBody.includes('保存済みコメント')&&formBody.includes('実際の投稿'),'saved comment and actual content restored');
- assert(formBody.includes('予定商品：naki-navy'));
+ assert(formBody.includes('実際の商品・カラー'));
  assert(formBody.includes('value="berry" checked')&&formBody.includes('value="naki-navy" '),'actual SKU selected, planned SKU not selected');
- saveForm({get:key=>({saves:'12',reach:'',observedAt:'2026-09-23T18:00',commentContents:'修正したコメント',voices:'','meaning-CUSTOMER_VALUE':''})[key]??'',getAll:key=>key==='skuIds'?['berry']:[],has:()=>false});
+ saveForm({get:key=>({reviewActualChoice:'later',saves:'12',reach:'',observedAt:'2026-09-23T18:00',commentContents:'修正したコメント',voices:'','meaning-CUSTOMER_VALUE':''})[key]??'',getAll:key=>key==='skuIds'?['berry']:[],has:()=>false});
  assert.equal(loaded.records['day10|7d'].saves,12);assert.deepEqual(Array.from(loaded.records['day10|7d'].commentContents),['修正したコメント']);
  assert.equal(loaded.records['day10|7d'].reach,null);assert.equal(loaded.records['day10|24h'],undefined);
  assert.equal(Object.keys(loaded.records).length,1,'same postId|7d record is updated');
