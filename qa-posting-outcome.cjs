@@ -25,8 +25,8 @@ const actualChoice=vm.runInNewContext(actualChoiceCode+'\nreviewActualChoice',{O
 const qaPost={...post,takeaway:'予定の伝えること',sequence:[{order:1}],stories:[{text:'予定Story'}],cta:'予定CTA'};
 const cleanSnapshot=actualChoice(qaPost,{get:key=>key==='reviewActualChoice'?'planned':null,getAll:()=>[]});
 assert.equal(cleanSnapshot.takeaway,'');
-assert.deepEqual(cleanSnapshot.sequence,[]);
-assert.deepEqual(cleanSnapshot.stories,[]);
+assert.equal(cleanSnapshot.sequence.length,0);
+assert.equal(cleanSnapshot.stories.length,0);
 assert.equal(cleanSnapshot.cta,'');
 context.editRecord('post-1|7d');assert(formBody.includes(`picker:${actual}`));
 // The existing 7d editor restores and replaces the same record key, without touching 24h.
