@@ -20,6 +20,14 @@ assert(formBody.includes(`予定商品：${planned}`)&&formBody.includes(`picker
 saveForm({get:key=>key==='saves'?'4':'',getAll:key=>key==='skuIds'?[actual]:[]});
 assert.deepEqual(post.skuIds,[planned]);assert.deepEqual(post.actualSnapshot.skuIds,[actual]);assert.equal(post.revision,3);assert.equal(demo.records['post-1|7d'].saves,4);
 const restored=JSON.parse(JSON.stringify(demo));assert.equal(restored.posts[0].skuIds[0],planned);assert.equal(restored.posts[0].actualSnapshot.skuIds[0],actual);assert.equal(restored.records['post-1|7d'].reach,null);
+const actualChoiceCode=between(axis,'function reviewActualChoice(p,f){','function reviewActualRecord(key,recordForm){');
+const actualChoice=vm.runInNewContext(actualChoiceCode+'\nreviewActualChoice',{OFFICIAL_TOPICS:[],demo,structuredClone,nowISO:()=> '2026-09-18T00:00:00.000Z'});
+const qaPost={...post,takeaway:'予定の伝えること',sequence:[{order:1}],stories:[{text:'予定Story'}],cta:'予定CTA'};
+const cleanSnapshot=actualChoice(qaPost,{get:key=>key==='reviewActualChoice'?'planned':null,getAll:()=>[]});
+assert.equal(cleanSnapshot.takeaway,'');
+assert.deepEqual(cleanSnapshot.sequence,[]);
+assert.deepEqual(cleanSnapshot.stories,[]);
+assert.equal(cleanSnapshot.cta,'');
 context.editRecord('post-1|7d');assert(formBody.includes(`picker:${actual}`));
 // The existing 7d editor restores and replaces the same record key, without touching 24h.
 const reviewContext={demo,editRecord:()=>{},allTasks:context.allTasks,actualPost:p=>({...p,...p.actualSnapshot}),openForm:(_title,body,save)=>{formBody=body;saveForm=save;},planDay:x=>x,jstDate:x=>String(x).slice(0,10),formats:{Feed:'Feed',Reel:'Reel'},html:x=>x,postLabel:p=>p.skuIds.join(' + '),RESULT_METRICS:{saves:'保存',reach:'リーチ'},formInput:(label,key,value)=>`${label}:${key}=${value};`,AXES:{CUSTOMER_VALUE:'価値'},jstInput:()=> '2026-09-17T18:00',nowISO:()=> '2026-09-18T00:00:00.000Z',captureBand:()=> '期間内',numberOrBlank:raw=>raw===''?null:Number(raw),emptyVoice:()=>({}),Date};
