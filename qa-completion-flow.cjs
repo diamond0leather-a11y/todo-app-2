@@ -152,6 +152,21 @@ assert.equal(posts.at(-1).hook,'実績を踏まえた新しい問い');
 assert.equal(learningDemo.analyses[0].appliedPostIds[0],'planned');
 assert.equal(posts[21].theme,'予定21','actual confirmation does not overwrite planned content');
 assert.equal(JSON.parse(persistedAnalysis).analyses[0].batchId,'qa-learning-cycle');
+const axis=fs.readFileSync(path.join(root,'three-axis.js'),'utf8');
+const schemaPost={id:'schema-post',revision:2,theme:'投稿テーマ例',derivedTheme:'異なる旧表示',conceptVersion:2,actualAt:null,deleted:false,format:'Feed'};
+const schemaCtx={demo:{posts:[schemaPost],reactions:[]},rangePosts:()=>[schemaPost],analysisFrom:'2026-09-27',analysisTo:'2026-10-04',structuredClone,ANALYSIS_ACTION_CATEGORIES:['伸ばす','継続','改善','次回検証']};
+const schema=vm.runInNewContext('let analysisSchema;'+between(axis,'analysisSchema=function(){','function compactAnalysisPayload(data){')+'analysisSchema()',schemaCtx);
+assert.equal(schema.proposals[0].changes.theme,'投稿テーマ例');
+assert.equal(schema.proposals[0].changes.derivedTheme,schema.proposals[0].changes.theme,'schema example must copy the exact theme string');
+const prompt=vm.runInNewContext('let exportPrompt;'+between(axis,'exportPrompt=function(){','validateImport=function(raw){')+'exportPrompt()',{
+ analysisSchema:()=>schema,compactAnalysisPayload:()=>({}),analysisPayload:()=>({}),ANALYSIS_ACTION_CATEGORIES:schemaCtx.ANALYSIS_ACTION_CATEGORIES
+});
+assert(prompt.includes('changes.themeとchanges.derivedThemeは必ず完全に同じ文字列'));
+assert(prompt.includes('"theme":"革を長く楽しむ","derivedTheme":"革を長く楽しむ"'));
+assert(html.includes(between(axis,'analysisSchema=function(){','function compactAnalysisPayload(data){')));
+assert(html.includes(between(axis,'exportPrompt=function(){','validateImport=function(raw){')));
+const mismatched={...analysisJson,batchId:'qa-theme-mismatch',proposals:[{postId:'planned',expectedRevision:posts.at(-1).revision,evidence:['p21|7d'],changes:{themeId:null,primaryAxis:'BUSINESS',parentId:null,topicGroup:'CUSTOMER',theme:'投稿テーマ例',derivedTheme:'異なるテーマ',takeaway:'伝えること',subjects:'対象',role:'役割',format:'Feed',caption:'本文',hook:'導入',cta:'導線',sequence:[],stories:[],shots:[],voiceIds:[],researchRequired:false}}]};
+assert.throws(()=>vm.runInNewContext('validateImport('+JSON.stringify(JSON.stringify(mismatched))+')',importCtx),/派生テーマと投稿テーマを一致させてください/);
 const scopedCode=between(editorial,'const baseEditorialContext=context;','function prompt(scope){');
 const nextCode=between(editorial,'function nextEditorialContext(){','function compactNextEditorialContext(data){');
 const nextLearning=vm.runInNewContext(editorialCode+scopedCode+nextCode+'\nnextEditorialContext',learningCtx)();
