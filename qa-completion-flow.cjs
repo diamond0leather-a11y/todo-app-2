@@ -159,10 +159,20 @@ const schema=vm.runInNewContext('let analysisSchema;'+between(axis,'analysisSche
 assert.equal(schema.proposals[0].changes.theme,'投稿テーマ例');
 assert.equal(schema.proposals[0].changes.derivedTheme,schema.proposals[0].changes.theme,'schema example must copy the exact theme string');
 const prompt=vm.runInNewContext('let exportPrompt;'+between(axis,'exportPrompt=function(){','validateImport=function(raw){')+'exportPrompt()',{
- analysisSchema:()=>schema,compactAnalysisPayload:()=>({}),analysisPayload:()=>({}),ANALYSIS_ACTION_CATEGORIES:schemaCtx.ANALYSIS_ACTION_CATEGORIES
+ analysisSchema:()=>schema,compactAnalysisPayload:data=>({period:data.period,targetPlan:data.targetPlan}),analysisPayload:()=>({period:{from:'2026-09-27',to:'2026-10-04'},targetPlan:[{postId:'schema-post',revision:2}],nextSuggestedPeriod:{from:'2026-09-27',to:'2026-10-04',nextFrom:'2026-10-05',nextTo:'2026-10-14'}}),analysisFrom:'2026-09-27',analysisTo:'2026-10-04',ANALYSIS_ACTION_CATEGORIES:schemaCtx.ANALYSIS_ACTION_CATEGORIES
 });
 assert(prompt.includes('changes.themeとchanges.derivedThemeは必ず完全に同じ文字列'));
 assert(prompt.includes('"theme":"革を長く楽しむ","derivedTheme":"革を長く楽しむ"'));
+assert(prompt.includes('分析対象期間（2026-09-27～2026-10-04）'));
+assert(prompt.includes('次に作成する10日プラン（2026-10-05～2026-10-14）'));
+assert(prompt.includes('experimentsへ日付ごとに記載'));
+assert(prompt.includes('proposalsはtargetPlanに含まれる未投稿IDの変更提案だけ'));
+const copiedContext=JSON.parse(prompt.split('\n\n分析データ:\n')[1]);
+assert.deepEqual(JSON.parse(JSON.stringify(copiedContext.analysisPeriod)),{from:'2026-09-27',to:'2026-10-04'});
+assert.deepEqual(JSON.parse(JSON.stringify(copiedContext.nextPlanPeriod)),{from:'2026-10-05',to:'2026-10-14'});
+assert.equal(copiedContext.period.from,'2026-09-27');
+assert.equal(schema.schema,2);
+assert(!Object.hasOwn(schema,'analysisPeriod')&&!Object.hasOwn(schema,'nextPlanPeriod'),'return schema is unchanged');
 assert(html.includes(between(axis,'analysisSchema=function(){','function compactAnalysisPayload(data){')));
 assert(html.includes(between(axis,'exportPrompt=function(){','validateImport=function(raw){')));
 const mismatched={...analysisJson,batchId:'qa-theme-mismatch',proposals:[{postId:'planned',expectedRevision:posts.at(-1).revision,evidence:['p21|7d'],changes:{themeId:null,primaryAxis:'BUSINESS',parentId:null,topicGroup:'CUSTOMER',theme:'投稿テーマ例',derivedTheme:'異なるテーマ',takeaway:'伝えること',subjects:'対象',role:'役割',format:'Feed',caption:'本文',hook:'導入',cta:'導線',sequence:[],stories:[],shots:[],voiceIds:[],researchRequired:false}}]};
