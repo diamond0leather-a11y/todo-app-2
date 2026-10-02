@@ -159,7 +159,7 @@ const schema=vm.runInNewContext('let analysisSchema;'+between(axis,'analysisSche
 assert.equal(schema.proposals[0].changes.theme,'投稿テーマ例');
 assert.equal(schema.proposals[0].changes.derivedTheme,schema.proposals[0].changes.theme,'schema example must copy the exact theme string');
 const prompt=vm.runInNewContext('let exportPrompt;'+between(axis,'exportPrompt=function(){','validateImport=function(raw){')+'exportPrompt()',{
- analysisSchema:()=>schema,compactAnalysisPayload:data=>({period:data.period,targetPlan:data.targetPlan}),analysisPayload:()=>({period:{from:'2026-09-27',to:'2026-10-04'},targetPlan:[{postId:'schema-post',revision:2}],nextSuggestedPeriod:{from:'2026-09-27',to:'2026-10-04',nextFrom:'2026-10-05',nextTo:'2026-10-14'}}),analysisFrom:'2026-09-27',analysisTo:'2026-10-04',ANALYSIS_ACTION_CATEGORIES:schemaCtx.ANALYSIS_ACTION_CATEGORIES
+ analysisSchema:()=>schema,compactAnalysisPayload:data=>({period:data.period,targetPlan:data.targetPlan}),analysisPayload:()=>({period:{from:'2026-09-27',to:'2026-10-04'},targetPlan:[{postId:'schema-post',revision:2}],nextSuggestedPeriod:{from:'2026-09-27',to:'2026-10-04',nextFrom:'2026-10-05',nextTo:'2026-10-14'}}),demo:{records:{'p21|7d':{}},posts:[{id:'planned'}],reactions:[{id:'reaction-1'}],analyses:[{batchId:'previous-analysis'}]},analysisFrom:'2026-09-27',analysisTo:'2026-10-04',ANALYSIS_ACTION_CATEGORIES:schemaCtx.ANALYSIS_ACTION_CATEGORIES
 });
 assert(prompt.includes('changes.themeとchanges.derivedThemeは必ず完全に同じ文字列'));
 assert(prompt.includes('"theme":"革を長く楽しむ","derivedTheme":"革を長く楽しむ"'));
@@ -167,7 +167,13 @@ assert(prompt.includes('分析対象期間（2026-09-27～2026-10-04）'));
 assert(prompt.includes('次に作成する10日プラン（2026-10-05～2026-10-14）'));
 assert(prompt.includes('experimentsへ日付ごとに記載'));
 assert(prompt.includes('proposalsはtargetPlanに含まれる未投稿IDの変更提案だけ'));
+assert(prompt.includes('facts、trends、hypotheses、experiments、newThemes、proposalsの各evidence'));
+assert(prompt.includes('evidenceIdsに実在するIDだけ'));
+assert(prompt.includes('sales-2026-10、nextPlanDays、analysisPeriod、nextPlanPeriod、salesなどのJSONキー名'));
+assert(prompt.includes('根拠となる実在IDがない項目は作らず'));
 const copiedContext=JSON.parse(prompt.split('\n\n分析データ:\n')[1]);
+assert.deepEqual(copiedContext.evidenceIds,['p21|7d','planned','reaction-1','previous-analysis']);
+assert(!copiedContext.evidenceIds.includes('sales-2026-10')&&!copiedContext.evidenceIds.includes('nextPlanDays'));
 assert.deepEqual(JSON.parse(JSON.stringify(copiedContext.analysisPeriod)),{from:'2026-09-27',to:'2026-10-04'});
 assert.deepEqual(JSON.parse(JSON.stringify(copiedContext.nextPlanPeriod)),{from:'2026-10-05',to:'2026-10-14'});
 assert.equal(copiedContext.period.from,'2026-09-27');
@@ -177,6 +183,10 @@ assert(html.includes(between(axis,'analysisSchema=function(){','function compact
 assert(html.includes(between(axis,'exportPrompt=function(){','validateImport=function(raw){')));
 const mismatched={...analysisJson,batchId:'qa-theme-mismatch',proposals:[{postId:'planned',expectedRevision:posts.at(-1).revision,evidence:['p21|7d'],changes:{themeId:null,primaryAxis:'BUSINESS',parentId:null,topicGroup:'CUSTOMER',theme:'投稿テーマ例',derivedTheme:'異なるテーマ',takeaway:'伝えること',subjects:'対象',role:'役割',format:'Feed',caption:'本文',hook:'導入',cta:'導線',sequence:[],stories:[],shots:[],voiceIds:[],researchRequired:false}}]};
 assert.throws(()=>vm.runInNewContext('validateImport('+JSON.stringify(JSON.stringify(mismatched))+')',importCtx),/派生テーマと投稿テーマを一致させてください/);
+for(const invalidEvidence of ['nextPlanDays','sales-2026-10','analysisPeriod','nextPlanPeriod','sales']){
+ const invalid={...analysisJson,batchId:'qa-invalid-evidence',facts:[{text:'架空の根拠',evidence:[invalidEvidence],category:'改善'}]};
+ assert.throws(()=>vm.runInNewContext('validateImport('+JSON.stringify(JSON.stringify(invalid))+')',importCtx),/根拠の記録IDが見つかりません/);
+}
 const scopedCode=between(editorial,'const baseEditorialContext=context;','function prompt(scope){');
 const nextCode=between(editorial,'function nextEditorialContext(){','function compactNextEditorialContext(data){');
 const nextLearning=vm.runInNewContext(editorialCode+scopedCode+nextCode+'\nnextEditorialContext',learningCtx)();
