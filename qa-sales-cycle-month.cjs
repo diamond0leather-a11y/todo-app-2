@@ -17,7 +17,7 @@ const details={innerHTML:'',querySelector:()=>({textContent:'優先商品・広�
 const listeners=[];let saves=0;
 const context={demo,TODAY:'2026-10-02',monthCursor:'2026-10',sku:id=>skus.find(s=>s.id===id),salesContext:date=>({next:Object.values(demo.months).filter(m=>m.date>=date).sort((a,b)=>a.date.localeCompare(b.date))[0]}),dayAdd(d,n){const date=new Date(d+'T12:00:00Z');date.setUTCDate(date.getUTCDate()+n);return date.toISOString().slice(0,10);},renderMonthWork:()=>{},dax:()=>[details],dx:()=>saved,short:d=>d.slice(5),html:s=>String(s),skuLabel:id=>id,document:{addEventListener:(type,fn,capture)=>listeners.push({type,fn,capture})},persist:()=>saves++};
 vm.createContext(context);
-vm.runInContext([get(sales,'function saleLine('),get(sales,'function effectiveSale('),get(sales,'function saleCandidateCycle('),get(sales,'const salesMonthRender=renderMonthWork;'),get(sales,"document.addEventListener('change',e=>{const d=e.target.dataset;if(!d.cycleSaleMonth")].join('\n'),context);
+vm.runInContext([get(sales,'function effectiveSalesHistory('),get(sales,'function saleLine('),get(sales,'function effectiveSale('),get(sales,'function saleCandidateCycle('),get(sales,'const salesMonthRender=renderMonthWork;'),get(sales,"document.addEventListener('change',e=>{const d=e.target.dataset;if(!d.cycleSaleMonth")].join('\n'),context);
 const cycle=date=>JSON.parse(JSON.stringify(context.saleCandidateCycle(date)));
 assert.deepEqual(cycle('2026-10-02').lineup.map(l=>l.skuId),['oct']);
 assert.equal(cycle('2026-10-02').from,'2026-09-07');assert.equal(cycle('2026-10-02').to,'2026-10-03');
@@ -33,5 +33,6 @@ context.TODAY='2026-10-05';context.renderMonthWork();assert(details.innerHTML.in
 skus.find(s=>s.id==='nov').restockDate='2026-12-01';assert.equal(cycle('2026-10-05').lineup.length,0,'product management date change is reflected');
 skus.find(s=>s.id==='nov').restockDate='2026-11-08';
 const handler=listeners.find(x=>x.type==='change'&&x.capture).fn;let stopped=false;handler({target:{dataset:{cycleSaleMonth:'2026-11',workCandidate:'nov'},checked:true},stopImmediatePropagation:()=>stopped=true});assert(stopped);assert.equal(nov.lineup[0].adCandidate,true);assert.equal(oct.lineup[1].adCandidate,undefined);assert.equal(saves,1);
-assert(sales.includes('demo.salesHistory.push('),'legacy sale history input and data preserved');
+assert(!sales.includes('recordSaleNew'),'duplicate manual sale history input removed');
+assert(sales.includes('demo.salesHistory ||= []'),'legacy sale history data preserved');
 console.log('PASS sale-cycle candidate dates, SKU restock filtering, published UI, checkbox target month, sale-day behavior, history retention');

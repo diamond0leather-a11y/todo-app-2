@@ -39,7 +39,7 @@ context=function(scope){
  data.reviews.analyses=(demo.analyses||[]).filter(relevant);
  data.reviews.analysisScope='対象期間・現在参照中の実投稿に関係する分析のみ。古い分析は削除せず、今回の判断材料からは除外';
  const sales=Object.entries(demo.salesResults||{}).filter(([month,result])=>{const date=result.initial?.saleDate||demo.months[month]?.date;return date&&date>=dayAdd(from,-60)&&date<=dayAdd(to,31);}).sort((a,b)=>a[0].localeCompare(b[0])).slice(-3);
- data.salesLearning={instruction:'販売結果とInstagram露出は別の事実。因果を断定せず、事実・傾向・仮説・次に試すことを分ける。3軸と7d主要評価、お客様の声を併せて判断する',results:sales.map(([month,result])=>({month,initial:result.initial||null,final:result.final||null,cycleReview:result.cycleReview||null,cycle:result.initial?cycleData(month):null})),actualSales:(demo.salesHistory||[]).filter(h=>!h.sample&&h.date>=dayAdd(from,-60)&&h.date<=dayAdd(to,31))};
+ data.salesLearning={instruction:'販売結果とInstagram露出は別の事実。因果を断定せず、事実・傾向・仮説・次に試すことを分ける。3軸と7d主要評価、お客様の声を併せて判断する',results:sales.map(([month,result])=>({month,initial:result.initial||null,final:result.final||null,cycleReview:result.cycleReview||null,cycle:result.initial?cycleData(month):null})),actualSales:effectiveSalesHistory().filter(h=>!h.sample&&h.date>=dayAdd(from,-60)&&h.date<=dayAdd(to,31))};
  return data;
 };
 const scopedPostingContext=context;context=function(scope){const data=scopedPostingContext(scope);data.notPostedHistory=noPostHistory(data.period.from);return data;};

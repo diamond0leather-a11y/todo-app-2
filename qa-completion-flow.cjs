@@ -60,6 +60,38 @@ function salesHarness(source){
 const sourceState=salesHarness(daily);
 salesHarness(html);
 
+// Sales results are the source of truth for history; legacy manual history remains intact.
+for(const source of [fs.readFileSync(path.join(root,'story-sales.js'),'utf8'),html]){
+ assert(!source.includes('recordSaleNew'),'duplicate manual sales-history entry is removed');
+ assert(source.includes('salesHistory:effectiveSalesHistory()'),'analysis uses the effective history');
+ const projection=between(source,'function addMonths(month,n=4){','function saleLine(id,date){');
+ const demo=structuredClone(sourceState);
+ demo.salesHistory=[{id:'legacy',date:'2026-09-06',skuIds:['a']}];
+ demo.skus[0].restockDate='2026-11-08';
+ demo.months['2026-10'].date='2026-10-04';
+ const api=vm.runInNewContext(projection+'\n({effectiveSalesHistory,saleCycle})',{demo,sku:id=>demo.skus.find(s=>s.id===id),Date});
+ const history=()=>JSON.parse(JSON.stringify(api.effectiveSalesHistory()));
+ const savedFinal=demo.salesResults['2026-10'].final;
+ delete demo.salesResults['2026-10'].final;
+ assert.equal(history().filter(h=>h.date==='2026-10-04'&&h.skuIds.includes('a')).length,1,'initial result immediately generates sale-date history');
+ demo.salesResults['2026-10'].final=savedFinal;
+ assert.equal(history().filter(h=>h.date==='2026-10-04'&&h.skuIds.includes('a')).length,1,'initial/final create one sale-date history');
+ assert(!history().some(h=>h.skuIds.includes('b')),'blank lineup SKU is not actual sale history');
+ assert.equal(api.saleCycle('a').last,'2026-10-04');
+ assert.equal(api.saleCycle('a').nextDate,'2026-11-08','SKU restock date is the next planned date');
+ assert.equal(history().length,2,'existing legacy history is preserved');
+ demo.salesHistory.push({id:'legacy-same-day',date:'2026-10-04',skuIds:['a']});
+ assert.equal(history().filter(h=>h.date==='2026-10-04'&&h.skuIds.includes('a')).length,1,'legacy and result history do not duplicate the same date/SKU');
+ demo.salesHistory.pop();
+ const unchanged=JSON.stringify(demo.salesHistory);
+ demo.salesResults['2026-10'].final.rows[0].quantity=4;
+ assert.equal(history().length,2,'quantity correction does not append a sale date');
+ assert.equal(JSON.stringify(demo.salesHistory),unchanged,'projection does not mutate legacy history');
+ const reloaded=JSON.parse(JSON.stringify(demo));
+ const afterReload=vm.runInNewContext(projection+'\neffectiveSalesHistory()',{demo:reloaded,sku:id=>reloaded.skus.find(s=>s.id===id),Date});
+ assert.equal(afterReload.length,2,'history survives JSON reload without duplicate records');
+}
+
 // Adding a SKU to a monthly lineup must not replace a manually chosen next sale month.
 function nextSaleMonthHarness(source){
  const code=between(source,'editSale=function(){','const currentStatus=')+'}';
@@ -90,6 +122,9 @@ const state={...sourceState,posts:[{id:'post-a',date:'2026-10-05',actualAt:'2026
 const {docs,reloaded}=share(state,structuredClone,encodeURIComponent);
 for(const key of ['posts/post-a','reviews/post-a%7C7d','voices/voice-a','months/2026-10','state/products','state/planning','state/shooting','state/operations'])assert(docs.has(key),key);
 for(const key of ['posts','records','reactions','months','salesResults','salesHistory','salePlans','skus','categories','items','shotDone'])assert.deepEqual(JSON.parse(JSON.stringify(reloaded[key])),JSON.parse(JSON.stringify(state[key])),key);
+const sharedHistory=vm.runInNewContext(between(html,'function effectiveSalesHistory(){','function saleCycle(id){')+'\neffectiveSalesHistory()',{demo:reloaded});
+assert.equal(sharedHistory.filter(h=>h.date==='2026-10-04'&&h.skuIds.includes('a')).length,1,'shared reload derives the actual sale once');
+assert(!sharedHistory.some(h=>(h.skuIds||[]).includes('b')),'shared reload keeps blank SKU out of actual history');
 
 // Run the production context functions with isolated records: actual and planned are distinct,
 // old comments are excluded, saved voices and sales learning remain available.
@@ -101,6 +136,7 @@ posts[18].actualSnapshot=null;
 records['p18|7d']={postId:'p18',stage:'7d',views:40,observedAt:'2026-09-26T18:00:00'};
 const feedback={instruction:'声は判断材料で、強制採用しない',comments:[{postId:'p0',recordId:'p0|7d',text:'対象外'},{postId:'p21',recordId:'p21|7d',text:'対象内'}],savedCustomerVoices:[{id:'request',voiceType:'商品要望',originalText:'別色が欲しい'},{id:'poll',kind:'アンケート',question:'どの色？',options:[{text:'茶',count:2}]},{id:'question',kind:'質問',question:'厚みは？'},{id:'faq',voiceType:'FAQ',originalText:'修理できますか？'}]};
 const learningDemo={posts,records,ads:[],months:{'2026-10':{date:'2026-10-04',lineup:[]}},events:[],analyses:[],salesResults:{'2026-10':{initial:{saleDate:'2026-10-04',actualRevenue:190},final:{actualRevenue:270},cycleReview:{reviewedAt:'2026-10-31'}}},salesHistory:[{id:'real-sale',date:'2026-10-04'}]};
+const effectiveLearningHistory=vm.runInNewContext(between(html,'function effectiveSalesHistory(){','function saleCycle(id){')+'\neffectiveSalesHistory',{demo:learningDemo});
 let daysUntilSale=30;
 const addDays=(date,n)=>new Date(Date.parse(date+'T00:00:00Z')+n*86400000).toISOString().slice(0,10);
 const tasks=posts.filter(p=>p.actualAt).flatMap(p=>['24h','7d'].map(stage=>{const at=Date.parse(p.actualAt);return {p,key:p.id+'|'+stage,stage,start:at+(stage==='7d'?156:18)*3600000,end:at+(stage==='7d'?204:36)*3600000};}));
@@ -108,7 +144,7 @@ const bandCode=between(html,'function captureBand(t,r){','function resultSummary
 const captureBand=vm.runInNewContext(bandCode+'\ncaptureBand',{Date});
 const planCode=between(html,'function planContext(date){','function chooseAxis(c){');
 const planContext=vm.runInNewContext(planCode+'\nplanContext',{demo:learningDemo,salesContext:()=>({until:daysUntilSale,next:{lineup:[]}}),resultSummary:()=>({sevenDay:{views:1}}),voiceCandidates:()=>[],Date});
-const learningCtx={demo:learningDemo,TODAY:'2026-10-05',SCHEMA:'cian-editorial-v1',OFFICIAL_TOPICS:[],validAxes:['CUSTOMER_VALUE','INSTAGRAM_GROWTH','BUSINESS'],RESULT_METRICS:{views:'再生',reach:'リーチ'},dayAdd:addDays,dayDiff:(to,from)=>(Date.parse(to)-Date.parse(from))/86400000,cycleDay:()=> 'Day1',blocked:()=>false,salesCycleBlock:()=>({from:'2026-10-05',to:'2026-10-14',nextFrom:'2026-10-15',nextTo:'2026-10-24',nextDayFrom:11}),planContext,allTasks:()=>tasks,recordState:t=>records[t.key]?'入力済み':'入力待ち',captureBand,nextPlanFeedbackContext:()=>feedback,exposureSummary:()=>({}),productContext:()=>[],monthlySaleStrategy:()=>[],rangePosts:()=>[],cycleData:month=>({month}),Date};
+const learningCtx={demo:learningDemo,effectiveSalesHistory:effectiveLearningHistory,TODAY:'2026-10-05',SCHEMA:'cian-editorial-v1',OFFICIAL_TOPICS:[],validAxes:['CUSTOMER_VALUE','INSTAGRAM_GROWTH','BUSINESS'],RESULT_METRICS:{views:'再生',reach:'リーチ'},dayAdd:addDays,dayDiff:(to,from)=>(Date.parse(to)-Date.parse(from))/86400000,cycleDay:()=> 'Day1',blocked:()=>false,salesCycleBlock:()=>({from:'2026-10-05',to:'2026-10-14',nextFrom:'2026-10-15',nextTo:'2026-10-24',nextDayFrom:11}),planContext,allTasks:()=>tasks,recordState:t=>records[t.key]?'入力済み':'入力待ち',captureBand,nextPlanFeedbackContext:()=>feedback,exposureSummary:()=>({}),productContext:()=>[],monthlySaleStrategy:()=>[],rangePosts:()=>[],cycleData:month=>({month}),Date};
 const learning=vm.runInNewContext(editorialCode+'\n({context,postHistories,reviewContext,feedbackContext})',learningCtx);
 const actualChoiceCode=between(fs.readFileSync(path.join(root,'three-axis.js'),'utf8'),'function reviewActualChoice(p,f){','function reviewActualRecord(key,recordForm){');
 const actualChoice=vm.runInNewContext(actualChoiceCode+'\nreviewActualChoice',{OFFICIAL_TOPICS:[],demo:learningDemo,structuredClone,nowISO:()=> '2026-09-29T00:00:00Z'});
