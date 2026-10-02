@@ -13,10 +13,10 @@ const distCode=[...prefixes.map(prefix=>line(html,prefix)),line(html,salesPrefix
 assert.deepEqual(distCode,rootCode,'published selection matches source');
 
 const skus=[
- {id:'sku-1-0-4',name:'chrome silver',itemId:'wallet',restockDate:'2026-11-08'},
- {id:'oct-restock',name:'October restock',itemId:'wallet',restockDate:'2026-10-04'},
+ {id:'sku-1-0-4',name:'chrome silver',itemId:'wallet',status:'restock',restockDate:'2026-11-08'},
+ {id:'oct-restock',name:'October restock',itemId:'wallet',status:'restock',restockDate:'2026-10-04'},
  {id:'no-date',name:'No individual date',itemId:'wallet',status:'selling',restockDate:''},
- {id:'unlisted-oct',name:'Unlisted October restock',itemId:'wallet',restockDate:'2026-10-04'}
+ {id:'unlisted-oct',name:'Unlisted October restock',itemId:'wallet',status:'restock',restockDate:'2026-10-04'}
 ];
 const lineup=skus.slice(0,3).map((s,i)=>({skuId:s.id,priority:i===0}));
 const context={demo:{skus,months:{'2026-10':{date:'2026-10-04',lineup}},categories:[{id:'cat'}]},TODAY:'2026-10-02',sku:id=>skus.find(s=>s.id===id),saleLine:(id,date)=>date.startsWith('2026-10')?context.saleRestockLineup('2026-10-04').find(l=>l.skuId===id):null,productScore:s=>s.id==='sku-1-0-4'?100:1,item:()=>({name:'wallet',categoryId:'cat'})};
