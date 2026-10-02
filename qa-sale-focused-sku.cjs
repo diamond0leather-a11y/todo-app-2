@@ -6,7 +6,7 @@ const root=fs.readFileSync(__dirname+'/three-axis.js','utf8');
 const sales=fs.readFileSync(__dirname+'/story-sales.js','utf8');
 const html=fs.readFileSync(__dirname+'/dist/index.html','utf8');
 const line=(source,prefix)=>{const found=source.split(/\r?\n/).find(value=>value.startsWith(prefix));assert(found,prefix);return found;};
-const prefixes=['function saleRestockLineup(','function saleFocusedSkuEligible(','function selectSubjects(','function conceptSubjects('];
+const prefixes=['function activeCatalogSku(','function saleRestockLineup(','function saleFocusedSkuEligible(','function selectSubjects(','function conceptSubjects('];
 const salesPrefix='const priorSelectSubjects=selectSubjects;';
 const rootCode=[...prefixes.map(prefix=>line(root,prefix)),line(sales,salesPrefix)];
 const distCode=[...prefixes.map(prefix=>line(html,prefix)),line(html,salesPrefix)];
@@ -19,7 +19,7 @@ const skus=[
  {id:'unlisted-oct',name:'Unlisted October restock',itemId:'wallet',restockDate:'2026-10-04'}
 ];
 const lineup=skus.slice(0,3).map((s,i)=>({skuId:s.id,priority:i===0}));
-const context={demo:{skus,months:{'2026-10':{date:'2026-10-04',lineup}}},TODAY:'2026-10-02',sku:id=>skus.find(s=>s.id===id),saleLine:(id,date)=>date.startsWith('2026-10')?context.saleRestockLineup('2026-10-04').find(l=>l.skuId===id):null,productScore:s=>s.id==='sku-1-0-4'?100:1,item:()=>({name:'wallet'})};
+const context={demo:{skus,months:{'2026-10':{date:'2026-10-04',lineup}},categories:[{id:'cat'}]},TODAY:'2026-10-02',sku:id=>skus.find(s=>s.id===id),saleLine:(id,date)=>date.startsWith('2026-10')?context.saleRestockLineup('2026-10-04').find(l=>l.skuId===id):null,productScore:s=>s.id==='sku-1-0-4'?100:1,item:()=>({name:'wallet',categoryId:'cat'})};
 vm.createContext(context);
 vm.runInContext(rootCode.join('\n'),context);
 const near={date:'2026-10-02',until:2,next:{date:'2026-10-04',lineup:context.saleRestockLineup('2026-10-04')},recent:[]};
