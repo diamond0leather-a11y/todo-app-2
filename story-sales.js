@@ -34,7 +34,7 @@ function editStoryNew(id,index){const p=demo.posts.find(x=>x.id===id),s=p.storie
 document.addEventListener('click',e=>{const b=e.target.closest('[data-work-story]');if(b){e.stopImmediatePropagation();const [id,i]=b.dataset.workStory.split('|');editStoryNew(id,+i);}},true);
 function salePickerFilters(){return `<div class="metrics-grid">${formSelect('絞り込み','saleFilter',[['all','すべて'],['candidate','今月販売候補'],['next','次回販売月が今月'],['soldout','SOLD OUT'],['always','常時販売'],['selected','今月対象']],'all')}${formSelect('カテゴリ','saleCategory',[['','すべて'],...demo.categories.filter(c=>!c.deleted).map(c=>[c.id,c.name])],'')}</div>`;}
 editSale=function(){const m=monthInfo(monthCursor);
- openForm(monthCursor+'の販売対象',formInput('オンライン販売日','date',m.date,'date')+formInput('販売開始','time',m.time,'time')+'<p class="tiny muted">今月販売する商品と今月の販売区分を設定します。現在の販売状態は商品管理で変更してください。</p>'+salePickerFilters()+skuPickerWork(m.lineup.map(l=>l.skuId),true),f=>{
+ openForm(monthCursor+'の月間販売設定',formInput('オンライン販売日','date',m.date,'date')+formInput('販売開始','time',m.time,'time')+'<p class="tiny muted">従来の月間登録と販売日を編集します。販売初動の対象は商品管理の再販日と同日の新発売から自動判定します。販売状態は商品管理で変更してください。</p>'+salePickerFilters()+skuPickerWork(m.lineup.map(l=>l.skuId),true),f=>{
   const date=f.get('date');if(date&&date.slice(0,7)!==monthCursor)throw Error('表示中の月の販売日を入力してください');
   const ids=f.getAll('skuIds'),inactive={...(m.lineupInactive||{})},lines=ids.map(id=>({...inactive[id],...m.lineup.find(l=>l.skuId===id),skuId:id,saleKind:f.get('kind-'+id)||'未設定'}));
   if(lines.some(l=>l.saleKind==='新発売'||l.saleKind==='再販')&&!date)throw Error('新発売・再販の共通販売日を入力してください');

@@ -34,14 +34,19 @@ assert.equal(fresh.conceptVersion,2);
 // Exercise the actual sales form save callbacks without a DOM dependency.
 function salesHarness(source){
  const code=between(source,'function salesResult(month){','const priceSkuEdit=')+between(source,'function numberOrBlank(raw){','renderReviewWork=');
- const demo={categories:[{id:'c',name:'財布'}],items:[{id:'i',categoryId:'c',name:'商品'}],skus:[{id:'a',itemId:'i',name:'A',price:100},{id:'b',itemId:'i',name:'B',price:200}],months:{'2026-10':{date:'2026-10-04',lineup:[{skuId:'a',saleKind:'再販'},{skuId:'b',saleKind:'常時販売'}]}},salesResults:{}};
+ const demo={categories:[{id:'c',name:'財布'}],items:[{id:'i',categoryId:'c',name:'商品'}],skus:[{id:'a',itemId:'i',name:'A',price:100,restockDate:'2026-10-04'},{id:'b',itemId:'i',name:'B',price:200},{id:'nov',itemId:'i',name:'11月',restockDate:'2026-11-08'},{id:'dec',itemId:'i',name:'12月',restockDate:'2026-12-06'},{id:'sep',itemId:'i',name:'9月',restockDate:'2026-09-06'},{id:'always',itemId:'i',name:'常時販売',status:'selling'}],months:{'2026-10':{date:'2026-10-04',lineup:[{skuId:'a',saleKind:'再販'},{skuId:'b',saleKind:'新発売'},{skuId:'nov',saleKind:'再販'},{skuId:'dec',saleKind:'再販'},{skuId:'sep',saleKind:'再販'},{skuId:'always',saleKind:'常時販売'}]}},salesResults:{}};
  let save,body;const form={querySelector:()=>({}),addEventListener:()=>{}};
- const ctx={demo,structuredClone,openForm:(_title,markup,fn)=>{body=markup;save=fn;},dx:()=>form,sku:id=>demo.skus.find(s=>s.id===id),skuLabel:id=>id,monthInfo:month=>demo.months[month],formInput:(label,name,value)=>`${label}:${name}=${value};`,formSelect:()=>'',html:s=>s,fmt:value=>String(value??''),nowISO:()=> '2026-10-31T12:00:00Z',FormData:class{}};
- const api=vm.runInNewContext(code+'\n({editSalesResult,monthlyResultRows,saleTotals,numberOrBlank})',ctx);
+ const ctx={demo,structuredClone,openForm:(_title,markup,fn)=>{body=markup;save=fn;},dx:()=>form,sku:id=>demo.skus.find(s=>s.id===id),skuLabel:id=>id,monthInfo:month=>demo.months[month],short:d=>d.slice(5),formInput:(label,name,value)=>`${label}:${name}=${value};`,formSelect:()=>'',html:s=>s,fmt:value=>String(value??''),nowISO:()=> '2026-10-31T12:00:00Z',FormData:class{}};
+ const api=vm.runInNewContext(code+'\n({editSalesResult,monthlyResultRows,showSaleTargets,saleTotals,numberOrBlank})',ctx);
  assert.equal(api.numberOrBlank('0'),0);
  assert.equal(api.numberOrBlank(''),null);
+ assert.deepEqual(Array.from(api.monthlyResultRows('2026-10','initial'),r=>r.skuId),['a','b'],'10/4 rows include matching restock and new release, not other dates or always-on');
+ api.showSaleTargets('2026-10');
+ assert(body.includes('販売対象：2SKU')&&body.includes('data-sales-input="2026-10|initial"'),'target list count and initial sales action use the same rows');
+ assert(body.includes('a<small>')&&body.includes('b<small>')&&!body.includes('nov<small>'),'target list contains only initial-sales SKUs');
  const submit=values=>save({get:key=>Object.hasOwn(values,key)?values[key]:'',has:key=>Object.hasOwn(values,key)});
  api.editSalesResult('2026-10','initial');
+ assert(!body.includes('qty-nov')&&!body.includes('qty-dec')&&!body.includes('qty-sep')&&!body.includes('qty-always'),'unrelated SKU inputs are hidden');
  submit({'qty-a':'2','price-a':'100','revenue-a':'190','price-b':'200','orders':'1','totalActual':'190'});
  assert.equal(demo.salesResults['2026-10'].initial.rows[0].quantity,2);
  assert.equal(demo.salesResults['2026-10'].initial.rows[1].quantity,null,'blank stays unknown');
@@ -55,10 +60,23 @@ function salesHarness(source){
  assert.equal(final.orders,1);
  assert.equal(final.actualRevenue,270);
  assert.deepEqual(JSON.parse(JSON.stringify(demo.salesResults))['2026-10'].final,JSON.parse(JSON.stringify(final)),'reload-equivalent JSON retains final values');
+ demo.salesResults['2026-10'].initial.rows.push({skuId:'nov',quantity:4,price:50,remaining:null,soldOut:null,actualRevenue:200,saleKind:'再販'});
+ api.editSalesResult('2026-10','initial');assert(!body.includes('qty-nov'),'previously saved unrelated SKU is not offered for new input');
+ submit({'qty-a':'2','price-a':'100','revenue-a':'190','price-b':'200','orders':'1','totalActual':'190'});
+ assert.equal(demo.salesResults['2026-10'].initial.rows.find(r=>r.skuId==='nov').quantity,4,'saved unrelated input remains intact');
+ demo.salesResults['2026-10'].initial.rows=demo.salesResults['2026-10'].initial.rows.filter(r=>r.skuId!=='nov');
  return demo;
 }
 const sourceState=salesHarness(daily);
 salesHarness(html);
+const targetMonthWrapper=between(daily,'const targetMonthRender=renderMonthWork;','document.addEventListener(');
+assert(html.includes(targetMonthWrapper),'public monthly target count matches source');
+{
+ const nodes={'#monthSaleSummary':{innerHTML:''},'#saleWork':{textContent:''}},rows=[{skuId:'a'},{skuId:'b'}];
+ vm.runInNewContext(targetMonthWrapper+'renderMonthWork()',{renderMonthWork:()=>{},monthCursor:'2026-10',monthInfo:()=>({date:'2026-10-04',time:'21:00'}),monthlyResultRows:()=>rows,dx:key=>nodes[key],short:d=>d.slice(5)});
+ assert(nodes['#monthSaleSummary'].innerHTML.includes('販売対象：2SKU'),'monthly header uses initial-sales row count');
+ assert.equal(nodes['#saleWork'].textContent,'販売対象2SKUを確認','monthly button says what it opens');
+}
 
 // Sales results are the source of truth for history; legacy manual history remains intact.
 for(const source of [fs.readFileSync(path.join(root,'story-sales.js'),'utf8'),html]){
