@@ -14,7 +14,7 @@ assert(published.includes(handler),'calendar click handler differs from public a
 const render=between(published,'renderReviewWork=function(){const tasks=homeReviewFilter?','const dailyActualEdit=editActual;');
 const recordEditor=between(source,'editRecord=function(key){','function numberOrBlank(raw){');
 const actualEditor=between(published,'function reviewActualChoice(p,f){','const originalPayload=');
-const picker=between(published,'function skuPickerWork(selected=[]','function saveInlineStatuses(f){');
+const picker=between(published,'function skuPickerWork(selected=[]','function editSale(){');
 const shared=vm.runInNewContext("const clean=value=>JSON.parse(JSON.stringify(value));const safeId=value=>encodeURIComponent(String(value)).replaceAll('%2F','%252F');"+between(sync,'function splitState(state){','async function readWorkspace(){')+'\n({splitState,joinState})',{});
 
 const post={id:'day10',date:'2026-09-16',actualAt:'2026-09-15T15:00:00.000Z',theme:'予定の投稿',format:'Feed',plannedTime:'18:00',skuIds:['naki-navy'],revision:2,actualSnapshot:{theme:'実際の投稿',format:'Reel',skuIds:['berry'],caption:'実際の本文',confirmedAt:'2026-09-16T12:00:00.000Z'}};

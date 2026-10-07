@@ -132,6 +132,17 @@ function nextSaleMonthHarness(source){
 }
 nextSaleMonthHarness(fs.readFileSync(path.join(root,'story-sales.js'),'utf8'));
 nextSaleMonthHarness(html);
+assert(!html.includes('saveInlineStatuses('),'monthly sale form has no SKU status/restock write-back');
+assert(html.includes('for(const el of currentStatus.querySelectorAll(\'[name^="status-"],[name^="restock-"]\'))el.disabled=true'),'monthly SKU status controls remain read-only');
+{
+ const sku={id:'naki-black',status:'restock',restockDate:'2026-10-04'},demo={skus:[sku],months:{'2026-10':{date:'',time:'21:00',lineup:[]}}};let save;
+ const ctx={demo,monthCursor:'2026-10',monthInfo:month=>demo.months[month],openForm:(_title,_body,callback)=>{save=callback;},formInput:()=>'',skuPickerWork:()=>''};
+ vm.runInNewContext(between(html,'function editSale(){','function editEventWork('),ctx);
+ ctx.editSale();save({get:key=>({'date':'2026-10-04','time':'21:00','status-naki-black':'soldout','restock-naki-black':''})[key]||'',getAll:key=>key==='skuIds'?['naki-black']:[]});
+ assert.equal(sku.status,'restock','monthly save cannot overwrite product status');
+ assert.equal(sku.restockDate,'2026-10-04','monthly save cannot clear product restock date');
+ assert.equal(demo.months['2026-10'].lineup[0].skuId,'naki-black','monthly sale selection still saves');
+}
 
 // The same complete state is split for sharing and rejoined from mock Firestore documents.
 const sharedCode=between(sync,'function splitState(state){','async function readWorkspace()');
