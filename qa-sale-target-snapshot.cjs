@@ -32,7 +32,9 @@ function fixture(){return {
  },salesResults:{}
 };}
 function run(text){
- const demo=fixture(),form={querySelector:()=>({}),addEventListener:()=>{}},nodes={'#monthSaleSummary':{innerHTML:''},'#saleWork':{textContent:''}};
+ const demo=fixture(),search={},visibleRows=[];
+ const form={querySelector:()=>search,querySelectorAll:selector=>selector==='.sales-result-row'?visibleRows:[],addEventListener:()=>{}};
+ const nodes={'#monthSaleSummary':{innerHTML:''},'#saleWork':{textContent:''}};
  let body='',save;
  const ctx={demo,structuredClone,Map,
   sku:id=>demo.skus.find(s=>s.id===id),monthInfo:month=>demo.months[month],
@@ -52,8 +54,14 @@ function run(text){
  assert(body.includes('販売対象：3SKU')&&['oct','always','both'].every(id=>body.includes(id+'<small>')),'target list uses the same set');
  ctx.editSalesResult('2026-10','initial');
  assert(['oct','always','both'].every(id=>body.includes('data-sku="'+id+'"'))&&!body.includes('data-sku="nov"'),'initial form uses the same set');
+ assert(body.includes('対象合計：3SKU')&&[...body.matchAll(/class="sales-result-row"/g)].length===3,'monthly, initial total, and actual SKU rows agree');
+ visibleRows.push(...['oct','always','both'].map(id=>({dataset:{resultSearch:id},hidden:false})));
+ search.oninput({target:{value:'oct'}});
+ assert.deepEqual(visibleRows.map(row=>row.hidden),[false,true,true],'search hides only unmatched rows');
+ assert(body.includes('対象合計：3SKU'),'search does not change the full target total');
  ctx.editSalesResult('2026-10','final');
  assert(['oct','always','both'].every(id=>body.includes('data-sku="'+id+'"'))&&!body.includes('data-sku="dec"'),'final form uses the same set');
+ assert(body.includes('対象合計：3SKU')&&[...body.matchAll(/class="sales-result-row"/g)].length===3,'final total and actual SKU rows agree');
  vm.runInContext(between(source,'const targetMonthRender=renderMonthWork;','document.addEventListener(')+'\nrenderMonthWork()',Object.assign(ctx,{renderMonthWork:()=>{},monthCursor:'2026-10'}));
  assert(nodes['#monthSaleSummary'].innerHTML.includes('販売対象：3SKU'));
  assert.equal(nodes['#saleWork'].textContent,'販売対象3SKUを確認');
