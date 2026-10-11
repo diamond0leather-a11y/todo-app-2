@@ -133,6 +133,24 @@ function importProtection(post,choice){
 function validateEditorialShots(shots,date){
  if(!Array.isArray(shots)||!shots.length||shots.length>30||shots.some(shot=>!['写真','動画'].includes(shot?.media)||typeof shot.what!=='string'||!shot.what.trim()||!Number.isSafeInteger(shot.count)||shot.count<1||shot.count>20||!Array.isArray(shot.skuIds)||shot.skuIds.some(id=>!sku(id)||sku(id).deleted)))throw Error(`${date}のメイン投稿の撮影指示を確認してください。`);
 }
+function normalizeEditorialPlan(plan){
+ const trim=value=>typeof value==='string'?value.trim():value;
+ return {...plan,customerValue:trim(plan.customerValue),themeCategory:trim(plan.themeCategory),mainTopic:trim(plan.mainTopic),angle:trim(plan.angle),mainPostBody:trim(plan.mainPostBody),CTA:trim(plan.CTA),products:Array.isArray(plan.products)?[...plan.products]:plan.products,
+  ...Object.fromEntries([1,2,3,4].map(n=>{const story=plan['story'+n];return ['story'+n,story&&typeof story==='object'&&!Array.isArray(story)?{...story,text:trim(story.text),skuIds:Array.isArray(story.skuIds)?[...story.skuIds]:story.skuIds}:story];})),
+  ...(Object.hasOwn(plan,'shots')?{shots:Array.isArray(plan.shots)?plan.shots.map(shot=>shot&&typeof shot==='object'&&!Array.isArray(shot)?{...shot,what:trim(shot.what),skuIds:Array.isArray(shot.skuIds)?[...shot.skuIds]:shot.skuIds}:shot):plan.shots}:{})};
+}
+function validateEditorialPlan(plan,{scope}){
+ const p=normalizeEditorialPlan(plan),topic=OFFICIAL_TOPICS.find(t=>t.id===p.themeId),tenDay=scope==='ten-day';
+ if(!/^\d{4}-\d{2}-\d{2}$/.test(p.date||''))throw Error('投稿の日付を確認してください。');
+ if(!topic||!validAxes.includes(p.primaryPurpose)||!['Feed','Reel'].includes(p.format))throw Error(tenDay?`${p.date}のテーマ・主目的・形式を確認してください。`:'正式テーマ・主目的・形式を確認してください。');
+ if(p.themeCategory&&p.themeCategory!==topic.group)throw Error(tenDay?`${p.date}のテーマ分類が正式100テーマと一致しません。`:'正式テーマのカテゴリがthemeIdと一致しません。');
+ if(typeof p.mainTopic!=='string'||!p.mainTopic||typeof p.mainPostBody!=='string'||!p.mainPostBody||typeof p.customerValue!=='string'||!p.customerValue||![p.story1,p.story2,p.story3,p.story4].every(s=>typeof s?.text==='string'&&s.text))throw Error(tenDay?`${p.date}のテーマ・本文・customerValue・Story1〜4を確認してください。`:'テーマ・顧客価値・本文・Story1〜4が不足しています。');
+ if(!Array.isArray(p.products)||p.products.some(id=>!sku(id)||sku(id).deleted))throw Error(tenDay?`${p.date}の商品IDが商品管理にありません。`:'商品IDを商品管理と照合してください。');
+ if([1,2,3,4].some(n=>p['story'+n].skuIds!==undefined&&(!Array.isArray(p['story'+n].skuIds)||p['story'+n].skuIds.some(id=>!sku(id)||sku(id).deleted))))throw Error(tenDay?`${p.date}のStoryの商品IDが商品管理にありません。`:'Storyの商品IDを商品管理と照合してください。');
+ if(!tenDay&&p.CTA!=null&&typeof p.CTA!=='string')throw Error('CTAは文章またはnullにしてください。');
+ if(tenDay||Object.hasOwn(p,'shots'))validateEditorialShots(p.shots,p.date);
+ return {plan:p,topic,story2Issue:story2Issue(p.story2)};
+}
 function validate(data){
  if(!data||data.schema!==SCHEMA||data.scope!=='ten-day'||!Array.isArray(data.plans))throw Error('10日企画JSONのschemaまたは形式が一致しません。');
  const period=importPeriod(data),seen=new Set();
@@ -143,14 +161,9 @@ function validate(data){
   const expectedDay=period.dayFrom+dayDiff(p.date,period.from);
   if(p.dayNumber!==expectedDay)throw Error(`${short(p.date)}のDayは${expectedDay}にしてください。`);
   seen.add(p.date);
-  const topic=OFFICIAL_TOPICS.find(t=>t.id===p.themeId);
-  if(!topic||!validAxes.includes(p.primaryPurpose)||!['Feed','Reel'].includes(p.format))throw Error(`${p.date}のテーマ・主目的・形式を確認してください。`);
-  if(p.themeCategory&&p.themeCategory!==topic.group)throw Error(`${p.date}のテーマ分類が正式100テーマと一致しません。`);
-  if(typeof p.mainTopic!=='string'||!p.mainTopic.trim()||typeof p.mainPostBody!=='string'||!p.mainPostBody.trim()||typeof p.customerValue!=='string'||!p.customerValue.trim()||![p.story1,p.story2,p.story3,p.story4].every(s=>typeof s?.text==='string'&&s.text.trim()))throw Error(`${p.date}のテーマ・本文・customerValue・Story1〜4を確認してください。`);
+  validateEditorialPlan(p,{scope:'ten-day'});
   if([...p.mainPostBody].length<300)throw Error(`${short(p.date)}の本文は300文字以上にしてください。`);
-  validateEditorialShots(p.shots,p.date);
-  if(!Array.isArray(p.products)||p.products.some(id=>!sku(id)||sku(id).deleted))throw Error(`${p.date}の商品IDが商品管理にありません。`);
-  for(const [index,story] of [p.story1,p.story2,p.story3,p.story4].entries()){const label=`${p.date}のStory${index+1}`;if(typeof story.asset!=='string'||!story.asset.trim())throw Error(`${label}のassetを確認してください。`);if(!['過去素材使用可','新規撮影必要','まとめ撮り対象'].includes(story.materialMode))throw Error(`${label}のmaterialModeを確認してください。許容値：過去素材使用可／新規撮影必要／まとめ撮り対象。`);if(typeof story.action!=='string'||!story.action.trim())throw Error(`${label}のactionを確認してください。`);if(story.skuIds!==undefined&&(!Array.isArray(story.skuIds)||story.skuIds.some(id=>!sku(id)||sku(id).deleted)))throw Error(`${p.date}のStoryの商品IDが商品管理にありません。`);}
+  for(const [index,story] of [p.story1,p.story2,p.story3,p.story4].entries()){const label=`${p.date}のStory${index+1}`;if(typeof story.asset!=='string'||!story.asset.trim())throw Error(`${label}のassetを確認してください。`);if(!['過去素材使用可','新規撮影必要','まとめ撮り対象'].includes(story.materialMode))throw Error(`${label}のmaterialModeを確認してください。許容値：過去素材使用可／新規撮影必要／まとめ撮り対象。`);if(typeof story.action!=='string'||!story.action.trim())throw Error(`${label}のactionを確認してください。`);}
  }
  for(let date=period.from;date<=period.to;date=dayAdd(date,1))if(!blocked(date)&&!seen.has(date))throw Error(`${short(date)}の企画がありません。`);
  return [...warnings(data.plans),...qualityAudit(data.plans).issues];
@@ -264,17 +277,21 @@ function periodReview(posts){
 }
 function singleContext(p){const broad=context('ten-day'),currentWarnings=periodReview(rangePosts()),others=rangePosts().filter(other=>other.id!==p.id&&!other.deleted).map(savedPlan);return {schema:SCHEMA,scope:SINGLE_SCOPE,target:savedPlan(p),currentWarnings,targetWarnings:currentWarnings.filter(note=>note.includes(short(p.date))),otherDays:others,actualHistory:broad.actualHistory,productExposure:broad.productExposure,monthlySaleStrategy:broad.monthly.saleStrategy,officialTopics:broad.officialTopics,products:broad.products};}
 function singlePrompt(p){const data=singleContext(p);return `cian en paclamの10日企画のうち、対象日だけを修正してください。他の日は変更しないでください。対象日のメインテーマを維持するか変更するかは、警告と10日全体のバランスを見て判断し、変更不要ならthemeIdを維持してください。重複語句の言い換えだけで済ませず、問い・結論・見せ方・企画構造まで確認し、企画角度そのものを変えてください。他の日と似ない内容にしてください。Story1は知識・有益・楽しさ、Story2は参加・対話、Story3は商品・革・ものづくりの発見、Story4は今日のメイン投稿への導線です。Story2は顧客とのコミュニケーションとして設計してください。Story3を商品紹介欄に固定しないでください。Story4を投稿タイトルの言い換えだけにしないでください。商品を出さないStoryも、CTAなしの日も認めます。Feed / Reelのみを使い、INDUSTRY 66〜80は出典確認が必要です。顧客価値を明示し、既存の手動編集・投稿済みデータは変更しないでください。\n\n返答は説明なしの1日分JSONだけ：{"schema":"${SCHEMA}","scope":"${SINGLE_SCOPE}","plan":{"date":"${p.date}","dayNumber":${data.target.dayNumber},"format":"Reel","primaryPurpose":"CUSTOMER_VALUE","customerValue":"...","themeId":"official-01","themeCategory":"LEATHER","mainTopic":"...","angle":"...","products":[],"mainPostBody":"...","story1":{"text":"...","action":"..."},"story2":{"text":"...","action":"..."},"story3":{"text":"...","action":"..."},"story4":{"text":"...","action":"..."},"CTA":null}}\n\n再提案コンテキスト：\n${JSON.stringify(data,null,2)}`;}
-function validateSingle(data,date){if(data?.schema!==SCHEMA||data.scope!==SINGLE_SCOPE||!data.plan||Array.isArray(data.plan)||data.plans)throw Error('1日再提案用JSONのschema・scope・planを確認してください。');const p=data.plan,topic=OFFICIAL_TOPICS.find(t=>t.id===p.themeId);if(p.date!==date)throw Error('対象日以外の企画は取り込めません。');if(blocked(date))throw Error('投稿不可日は再提案を確定できません。');if(p.dayNumber!=null&&Number(p.dayNumber)!==Number(cycleDay(date).replace(/\D/g,'')))throw Error('Day表示が対象日と一致しません。');if(!topic||!validAxes.includes(p.primaryPurpose)||!['Feed','Reel'].includes(p.format))throw Error('正式テーマ・主目的・形式を確認してください。');if(p.themeCategory&&p.themeCategory!==topic.group)throw Error('正式テーマのカテゴリがthemeIdと一致しません。');if(!p.mainTopic?.trim()||!p.customerValue?.trim()||!p.mainPostBody?.trim()||![1,2,3,4].every(n=>p['story'+n]?.text?.trim()))throw Error('テーマ・顧客価値・本文・Story1〜4が不足しています。');if(!Array.isArray(p.products)||p.products.some(id=>!sku(id)||sku(id).deleted))throw Error('商品IDを商品管理と照合してください。');if([1,2,3,4].some(n=>p['story'+n].skuIds!==undefined&&(!Array.isArray(p['story'+n].skuIds)||p['story'+n].skuIds.some(id=>!sku(id)||sku(id).deleted))))throw Error('Storyの商品IDを商品管理と照合してください。');if(p.CTA!=null&&typeof p.CTA!=='string')throw Error('CTAは文章またはnullにしてください。');const issue=story2Issue(p.story2);if(issue)throw Error(issue);return topic;}
-const originalValidateSingle=validateSingle;
-validateSingle=function(data,date){
- const topic=originalValidateSingle(data,date),plan=data.plan,hasShots=Object.prototype.hasOwnProperty.call(plan,'shots');
- if(hasShots)validateEditorialShots(plan.shots,date);
- const shotIds=hasShots?plan.shots.map(shot=>shot.id).filter(id=>id!==undefined):[];
+function validateSingle(data,date){
+ if(data?.schema!==SCHEMA||data.scope!==SINGLE_SCOPE||!data.plan||Array.isArray(data.plan)||data.plans)throw Error('1日再提案用JSONのschema・scope・planを確認してください。');
+ const p=data.plan;
+ if(p.date!==date)throw Error('対象日以外の企画は取り込めません。');
+ if(blocked(date))throw Error('投稿不可日は再提案を確定できません。');
+ if(p.dayNumber!=null&&Number(p.dayNumber)!==Number(cycleDay(date).replace(/\D/g,'')))throw Error('Day表示が対象日と一致しません。');
+ const {topic,story2Issue:issue}=validateEditorialPlan(p,{scope:SINGLE_SCOPE});
+ if(issue)throw Error(issue);
+ const hasShots=Object.hasOwn(p,'shots');
+ const shotIds=hasShots?p.shots.map(shot=>shot.id).filter(id=>id!==undefined):[];
  if(hasShots&&(shotIds.some(id=>typeof id!=='string'||!id.trim())||new Set(shotIds).size!==shotIds.length))throw Error('撮影IDが不正または重複しています。');
  const available=new Set(shotIds);
- if(hasShots&&[1,2,3,4].some(n=>plan['story'+n].shotId&&!available.has(plan['story'+n].shotId)))throw Error('Storyの撮影IDが対象日のshotsに存在しません。');
+ if(hasShots&&[1,2,3,4].some(n=>p['story'+n].shotId&&!available.has(p['story'+n].shotId)))throw Error('Storyの撮影IDが対象日のshotsに存在しません。');
  return topic;
-};
+}
 function singleDayShotUpdate(post,plan,stories){
  if(!Object.prototype.hasOwnProperty.call(plan,'shots'))return {stories};
  const revision=(post.revision||0)+1,sourceIds=new Map();

@@ -15,7 +15,7 @@ for(const story of dialogues.filter(story=>/アンケート|二択/.test(story.k
 for(const options of [undefined,[],['表面'],['表面','表面'],['表面','裏面','側面']])assert(issue({...poll,options}),'missing, duplicate or excess choices are rejected');
 assert(issue({...poll,kind:'質問箱',options:[]}).includes('二択'),'two-choice wording cannot be mislabeled as a question box');
 assert.equal(issue({kind:'質問箱',text:'革で気になることはありますか？',action:'質問スタンプで回答',options:[]}),'' ,'non-poll story does not need choices');
-assert(editorial.includes('const issue=story2Issue(p.story2);if(issue)throw Error(issue)'),'single-day reproposal validates poll options');
+assert(editorial.includes('story2Issue:story2Issue(p.story2)')&&editorial.includes('const {topic,story2Issue:issue}=validateEditorialPlan(p,{scope:SINGLE_SCOPE});')&&editorial.includes('if(issue)throw Error(issue);'),'single-day reproposal validates poll options through the shared Plan validator');
 assert(editorial.includes('質問だけで選択肢を省略しないでください'),'ChatGPT prompts require choices');
 
 const post={id:'post-1',skuIds:[],revision:1,stories:[
