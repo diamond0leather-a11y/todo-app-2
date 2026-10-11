@@ -96,7 +96,7 @@ const run=async()=>{await new Promise(resolve=>server.listen(0,'127.0.0.1',resol
  await page.evaluate(()=>{document.querySelector('#importTenEditorial').click();window.__resolveFlush();});
  await page.locator('#workDialog').waitFor({state:'hidden'});
  await page.evaluate(()=>{window.todo2SyncBridge.flush=window.__realFlush;document.querySelector('#importTenEditorial').click();});
- assert.equal(await page.locator('#workTitle').textContent(),'ChatGPTの10日企画を取り込む','normal import must recover after success');
+ assert.equal(await page.locator('#workTitle').textContent(),'ChatGPT JSONを取り込む','normal import must recover after success');
  await page.evaluate(()=>document.querySelector('#workDialog').close());
  const analysis=await page.evaluate(()=>{const sample=analysisSchema();sample.batchId='qa-editorial-regression';sample.proposals=[];const accepted=['伸ばす','継続','改善','次回検証'].every(category=>{sample.experiments[0].category=category;try{validateImport(JSON.stringify(sample));return true;}catch{return false;}});sample.experiments[0].category='BUSINESS';let rejected=false;try{validateImport(JSON.stringify(sample));}catch(error){rejected=error.message.includes('category');}return {schema:sample.schema,accepted,rejected};});
  assert.deepEqual(analysis,{schema:2,accepted:true,rejected:true});
