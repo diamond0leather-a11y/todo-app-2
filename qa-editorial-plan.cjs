@@ -30,6 +30,26 @@ const single=p=>ctx.validateSingle({schema:ctx.SCHEMA,scope:ctx.SINGLE_SCOPE,pla
 
 assert.equal(ten(plan()).length,0);
 assert.equal(single(plan()).id,'official-01');
+for(const absent of [null,undefined]){
+ const optional=plan();if(absent===undefined)delete optional.themeId;else optional.themeId=absent;
+ delete optional.themeCategory;
+ assert.equal(ten(optional).length,0);
+ assert.equal(single(optional),null);
+ optional.themeCategory='BUSINESS';
+ assert.equal(ten(optional).length,0,'themeCategory does not classify a plan without an official theme');
+ assert.equal(single(optional),null);
+}
+for(const id of ['', 'official-999', 'extra-sale', 'unknown']){
+ const invalid=plan();invalid.themeId=id;
+ assert.throws(()=>ten(invalid),undefined,`ten-day rejects ${id}`);
+ assert.throws(()=>single(invalid),undefined,`single-day rejects ${id}`);
+}
+const wrongCategory=plan();wrongCategory.themeCategory='CUSTOMER';
+assert.throws(()=>ten(wrongCategory),/テーマ分類/);
+assert.throws(()=>single(wrongCategory),/カテゴリ/);
+const noTopic=plan();delete noTopic.themeId;delete noTopic.themeCategory;delete noTopic.mainTopic;
+assert.throws(()=>ten(noTopic),/テーマ/);
+assert.throws(()=>single(noTopic),/テーマ/);
 assert.ok(sharedCalls>=2,'both entry points must call the shared validator');
 const originalPlan=plan(),normal=ctx.normalizeEditorialPlan({...originalPlan,mainTopic:'  新商品の紹介  '});
 assert.equal(normal.mainTopic,'新商品の紹介');
@@ -50,4 +70,20 @@ const noShots=plan();delete noShots.shots;
 assert.throws(()=>ten(noShots),/撮影指示/);
 assert.equal(single(noShots).id,'official-01');
 assert.equal(single(plan()).id,'official-01');
+const concept=fs.readFileSync('three-axis.js','utf8');
+const published=fs.readFileSync('dist/index.html','utf8');
+const conceptCheck=concept.match(/^function generatedConceptError\(post\).*$/m)?.[0];
+assert.ok(conceptCheck&&published.includes(conceptCheck),'source and published concept validation match');
+assert.ok(concept.includes("sale:null")&&published.includes("sale:null"),'sale brief has no fabricated official parent');
+assert.ok(concept.includes('post.themeId=topic.id;')&&published.includes('post.themeId=topic.id;'),'generated official topic uses its official ID');
+const conceptCtx={OFFICIAL_TOPICS:ctx.OFFICIAL_TOPICS,AXES:{BUSINESS:'販売'}};
+vm.createContext(conceptCtx);vm.runInContext(conceptCheck,conceptCtx);
+assert.equal(conceptCtx.generatedConceptError({theme:'新発売案内',parentId:null,primaryAxis:'BUSINESS'}),'');
+assert.match(conceptCtx.generatedConceptError({theme:'案内',parentId:'official-999',primaryAxis:'BUSINESS'}),/親テーマID/);
+const planner=fs.readFileSync('dist/period-planner.js','utf8');
+const story1Check=planner.match(/^function story1Candidate\(post,attempt\).*$/m)?.[0];
+assert.ok(story1Check);
+const plannerCtx={OFFICIAL_TOPICS:ctx.OFFICIAL_TOPICS};vm.createContext(plannerCtx);
+vm.runInContext(story1Check,plannerCtx);
+assert.equal(plannerCtx.story1Candidate({parentId:null,theme:'販売ラインナップ',takeaway:'次回予定',topicGroup:null}).parentId,null);
 console.log('PASS shared Plan normalizer/validator on ten-day and single-day paths');

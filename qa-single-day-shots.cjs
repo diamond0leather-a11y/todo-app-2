@@ -30,6 +30,15 @@ preview(plan());
 assert.equal(JSON.stringify(post.shots),oldShots);
 assert.equal(JSON.stringify(post.sequence),oldSequence);
 assert.equal(post.theme,'新しいテーマ');
+// Removing an official reference only affects the edited post, including a stale legacy themeId.
+post.parentId='official-01';post.themeId='official-01';
+const independent=plan();independent.themeId=null;delete independent.themeCategory;independent.mainTopic='販売ラインナップ案内';
+preview(independent);
+assert.equal(post.parentId,null);
+assert.equal(post.themeId,null);
+assert.equal(post.theme,'販売ラインナップ案内');
+assert.equal(ctx.saved.parentId,null);
+assert.equal(ctx.saved.themeId,null);
 
 const shotPlan=plan();
 shotPlan.shots=[{id:'new-a',media:'写真',what:'1カット目｜表紙',count:1,skuIds:['sku-a']},{id:'new-b',media:'写真',what:'2カット目｜商品',count:1,skuIds:['sku-b']}];
