@@ -17,7 +17,10 @@ for(const file of ['three-axis.js','dist/index.html']){
   const legacy={id:'old',revision:1,shots:[{id:'old-shot',what:'旧shot内容',skuIds:[]}],sequence:[
     {order:1,visual:'旧構成の画面',words:'旧構成の言葉',shotId:'old-shot'}
   ],stories:[],format:'Feed',theme:'旧企画',derivedTheme:'旧企画'};
-  const posts=[authoritative,legacy],detail={markup:'',insertAdjacentHTML(_where,value){this.markup+=value;}};
+  const quality={id:'quality',revision:1,contentQualityVersion:1,shots:[{id:'quality-shot',media:'写真',what:'工程を撮る',skuIds:[],signature:'quality-old'}],sequence:[
+    {order:1,words:'載せる言葉',shotId:'quality-shot'}
+  ],stories:[],format:'Feed',theme:'新規企画',derivedTheme:'新規企画'};
+  const posts=[authoritative,quality,legacy],detail={markup:'',insertAdjacentHTML(_where,value){this.markup+=value;}};
   const context={demo:{posts},oldShowPost(){},dax:()=>[],dx:selector=>selector==='#dayDetail'?detail:{close(){}},
     html:value=>String(value??''),topicLabel:()=>'',AXES:{},OFFICIAL_TOPICS:[],
     formSelect:()=>'',formInput:()=>'',openForm(_title,markup,save){context.form={markup,save};}};
@@ -38,6 +41,16 @@ for(const file of ['three-axis.js','dist/index.html']){
   assert.ok(authoritative.sequence.every(s=>!Object.hasOwn(s,'visual')));
   assert.equal(JSON.stringify(authoritative.sequence.map(s=>s.order)),JSON.stringify([1,2]));
   assert.equal(JSON.stringify(authoritative.sequence.map(s=>s.shotId)),JSON.stringify(['shot-1','shot-2']));
+  detail.markup='';context.showPost('quality');
+  assert.match(detail.markup,/工程を撮る/);
+  context.editConcept('quality');
+  assert.match(context.form.markup,/工程を撮る｜載せる言葉/);
+  context.form.save(form('更新した工程｜更新した言葉'));
+  assert.equal(quality.shots[0].what,'更新した工程');
+  assert.equal(quality.sequence[0].words,'更新した言葉');
+  assert.equal(quality.sequence[0].order,1);
+  assert.equal(quality.sequence[0].shotId,'quality-shot');
+  assert.equal(Object.hasOwn(quality.sequence[0],'visual'),false);
   detail.markup='';context.showPost('old');
   assert.match(detail.markup,/旧構成の画面/);
   assert.doesNotMatch(detail.markup,/旧shot内容/);
@@ -47,5 +60,15 @@ for(const file of ['three-axis.js','dist/index.html']){
   assert.equal(legacy.sequence[0].visual,'編集した旧画面');
   assert.equal(legacy.sequence[0].words,'編集した旧言葉');
   assert.equal(legacy.shots[0].what,'旧shot内容');
+  const monthly=fs.readFileSync('dist/period-planner.js','utf8').split(/\r?\n/).find(line=>line.startsWith('function monthlyMetadata(post)'));
+  assert.ok(monthly,`${file}: 月間メタデータ`);
+  const metadataContext={demo:{posts},sku:()=>null,OFFICIAL_TOPICS:[],isModernPost:context.isModernPost};
+  quality.skuIds=[];legacy.skuIds=[];
+  vm.createContext(metadataContext);
+  vm.runInContext(monthly,metadataContext);
+  assert.equal(JSON.stringify(metadataContext.monthlyMetadata(quality).craftProcess),JSON.stringify(['更新した工程']));
+  assert.equal(JSON.stringify(metadataContext.monthlyMetadata(legacy).craftProcess),JSON.stringify([]));
+  legacy.sequence[0].visual='旧工程の画面';
+  assert.equal(JSON.stringify(metadataContext.monthlyMetadata(legacy).craftProcess),JSON.stringify(['旧工程の画面']));
 }
-console.log('PASS authoritative shots.what display/edit, legacy sequence.visual fallback, and sequence.words');
+console.log('PASS modern shots.what display/edit, legacy sequence.visual fallback, monthly metadata, and sequence.words');

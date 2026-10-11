@@ -2,6 +2,9 @@
 function hasAuthoritativeShots(post) {
   return post?.shotsAuthoritative===true && Array.isArray(post.shots) && post.shots.length>0;
 }
+function isModernPost(post) {
+  return (hasAuthoritativeShots(post) || post?.contentQualityVersion===1) && Array.isArray(post?.shots) && post.shots.length>0;
+}
 (function () {
   const previousConcept = createConcept;
   const previousStories = makeStories;
@@ -92,12 +95,12 @@ function hasAuthoritativeShots(post) {
     p.caption=caption(p);
     p.stories=stories(p);
     p.shots=shots(p);
-    p.sequence=p.shots.map((shot,i)=>({order:i+1,visual:shot.what,words:i===0?p.theme:i===1?p.takeaway:p.cta||p.takeaway,shotId:shot.id}));
+    p.sequence=p.shots.map((shot,i)=>({order:i+1,words:i===0?p.theme:i===1?p.takeaway:p.cta||p.takeaway,shotId:shot.id}));
     for(const story of p.stories) if(story.shotId) story.shotId=p.shots[0].id;
     p.contentQualityVersion=1;
     const issues=qualityIssues(p);
     if (issues.length) throw Error('新規投稿の品質確認が必要です：'+issues.join('、'));
     return p;
   };
-  specificShootDirections = function (p) { return hasAuthoritativeShots(p) || p.contentQualityVersion===1 ? p.shots : previousShoot(p); };
+  specificShootDirections = function (p) { return isModernPost(p) ? p.shots : previousShoot(p); };
 })();

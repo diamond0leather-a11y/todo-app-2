@@ -52,6 +52,8 @@ for(const p of results){
   assert.notEqual(p.stories[0].text,p.stories[2].text);
   assert.notEqual(p.stories[2].text,p.stories[3].text);
   assert.equal(p.shots.length,3);
+  assert.equal(p.contentQualityVersion,1);
+  assert.ok(p.sequence.every((row,i)=>!Object.hasOwn(row,'visual')&&row.shotId===p.shots[i].id&&row.order===i+1&&row.words));
   assert.ok(p.shots.every((s,i)=>s.what.includes(`${i+1}カット目｜`)&&['目的：','カメラ：','被写体：','配置・向き：'].every(label=>s.what.includes(label))));
   assert.ok(p.shots.every(s=>!/三場面|3場面/.test(s.what)));
   assert.ok(p.shots.every(s=>s.media===(p.format==='Reel'?'動画':'写真')));
