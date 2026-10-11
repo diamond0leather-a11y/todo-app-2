@@ -105,7 +105,7 @@
     if (issues.length) throw Error('新規投稿の品質確認が必要です：'+issues.join('、'));
     return p;
   };
-  specificShootDirections = function (p) { return p.date==='2026-10-11' ? lineupShots(p) : p.contentQualityVersion===1 ? p.shots : previousShoot(p); };
+  specificShootDirections = function (p) { return p.shots?.some(shot=>String(shot.signature||'').startsWith(`single-editorial|${p.id}|`)) ? p.shots : p.date==='2026-10-11' ? lineupShots(p) : p.contentQualityVersion===1 ? p.shots : previousShoot(p); };
   const previousShootGroups=shootGroups;
   shootGroups=function () {
     const posts=rangePosts().filter(p=>p.date==='2026-10-11'&&!p.paused&&!p.deleted&&!blocked(p.date));

@@ -37,3 +37,28 @@ assert(source.includes('振り返り開始')&&source.includes('振り返り終�
 assert(!source.includes('planStartWork'));
 assert(!source.includes('開始日を選び'));
 console.log('PASS current and sale-clipped periods, notification analysis/next labels, editable analysis dates');
+const editorial=fs.readFileSync(__dirname+'/dist/chatgpt-editorial.js','utf8');
+const rulesStart=editorial.indexOf('const currentEditorialRules='),rulesEnd=editorial.indexOf('window.editorialPlanner=',rulesStart);
+assert(rulesStart>=0&&rulesEnd>rulesStart,'published generation-rule wrapper exists');
+const prompts={prompt:()=> '商品を毎日出す必要はありません。Story1：革を知る・役立つ知識・楽しさ。Story1はメインの要約ではなく別の知識。返答は説明文を付けずJSONだけにしてください。',singlePrompt:()=> 'Story1は知識・有益・楽しさ。返答は説明なしの1日分JSONだけ：'};
+vm.createContext(prompts);vm.runInContext(editorial.slice(rulesStart,rulesEnd),prompts);
+const ten=prompts.prompt('ten-day'),single=prompts.singlePrompt({date:'2026-10-11'});
+for(const generated of [ten,single]){
+  assert(generated.includes('7｜商品・販売・信頼')&&generated.includes('永久固定比率ではない'));
+  assert(generated.includes('ファッション35%')&&generated.includes('写真1枚'));
+  assert(generated.includes('themeとderivedThemeが共存する場合は完全一致'));
+  assert(generated.includes('全カットへ投稿全体のSKUを機械的に複製しない'));
+  assert(generated.includes('最終的に画面へ渡る主目的'));
+  assert(!generated.includes('Story1：革を知る・役立つ知識・楽しさ'));
+  assert(!generated.includes('Story1は知識・有益・楽しさ'));
+}
+assert(!ten.includes('商品を毎日出す必要はありません'));
+assert(!prompts.prompt('month').includes('7｜商品・販売・信頼'),'ten-day guideline must not alter month scope');
+const rootAnalysis=fs.readFileSync(__dirname+'/three-axis.js','utf8');
+for(const published of [source,rootAnalysis]){
+  assert(published.includes('7｜商品・販売・信頼'));
+  assert(published.includes('Story1は革の毎日解説や販売枠にせず'));
+  assert(published.includes('各shot／Storyの実際に写るskuIdsを区別する'));
+  assert(!published.includes('CUSTOMER VALUE / INSTAGRAM GROWTH / BUSINESSを10日と販売周期で同時に考えてください。固定比率なし。'));
+}
+console.log('PASS final ten-day/single-day/analysis generation instructions and source-public parity');
