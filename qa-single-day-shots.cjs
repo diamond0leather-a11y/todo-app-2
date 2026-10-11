@@ -21,7 +21,7 @@ vm.runInContext(between('function validateSingle(data,date)', 'function planComp
 vm.runInContext(between('function showSinglePreview()', 'function openSingleImport('),ctx);
 
 const plan = () => ({date:post.date,format:'Feed',primaryPurpose:'BUSINESS',themeId:'official-01',themeCategory:'LEATHER',mainTopic:'新しいテーマ',customerValue:'価値',mainPostBody:'新しい本文',products:['sku-a'],CTA:null,
-  story1:{text:'Story1'},story2:{text:'Story2'},story3:{text:'Story3'},story4:{text:'Story4'}});
+  story1:{text:'Story1',materialMode:'過去素材使用可'},story2:{text:'Story2',materialMode:'過去素材使用可'},story3:{text:'Story3',materialMode:'過去素材使用可'},story4:{text:'Story4',materialMode:'過去素材使用可'}});
 const preview = input => {ctx.singlePreview={postId:post.id,before:{},after:input,revision:post.revision};ctx.showSinglePreview();ctx.save();};
 
 // Legacy JSON does not supply shots. Neither shots nor sequence may change.
