@@ -75,12 +75,12 @@ const ui={demo:{reactions:[],shotDone:{}},OFFICIAL_TOPICS:[],sku:()=>null,skuLab
   createConcept:()=>({}),makeStories:()=>[]};
 vm.createContext(ui);
 const htmlSource=fs.readFileSync('dist/index.html','utf8');
-const actualRender=htmlSource.split(/\r?\n/).find(line=>line.startsWith('const salesRenderShoot=renderShoot;renderShoot=function'));
+const actualRender=htmlSource.split('const salesRenderShoot=renderShoot;')[1]?.split('const salesHome=renderHome;')[0];
 assert.ok(actualRender);
-vm.runInContext(actualRender.slice(actualRender.indexOf('renderShoot=function')),ui);
-const inline=htmlSource.split(/\r?\n/).find(line=>line.startsWith('const oldStoryShootGroups=shootGroups;shootGroups=function'));
+vm.runInContext('renderShoot=function'+actualRender.split('renderShoot=function')[1],ui);
+const inline=htmlSource.split('\nshootGroups=function(){const groups=new Map();').at(-1)?.split('const salesRenderShoot=renderShoot;')[0];
 assert.ok(inline);
-vm.runInContext(inline.slice(inline.indexOf('shootGroups=function')),ui);
+vm.runInContext('shootGroups=function(){const groups=new Map();'+inline,ui);
 vm.runInContext(fs.readFileSync('dist/content-quality.js','utf8'),ui);
 assert.equal(ui.specificShootDirections(reload),reload.shots);
 const visible=ui.shootGroups().filter(group=>group.uses.some(use=>use.date===post.date));

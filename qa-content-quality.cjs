@@ -36,10 +36,12 @@ const context = {
 };
 vm.createContext(context);
 // Execute the actual final shootGroups implementation from the published HTML.
-const inlineShootGroups=fs.readFileSync('dist/index.html','utf8').split(/\r?\n/).find(line=>line.startsWith('const oldStoryShootGroups=shootGroups;shootGroups=function'));
+const htmlSource=fs.readFileSync('dist/index.html','utf8');
+const inlineShootGroups=htmlSource.split('\nshootGroups=function(){const groups=new Map();').at(-1)?.split('const salesRenderShoot=renderShoot;')[0];
 assert.ok(inlineShootGroups,'公開版の撮影リスト生成処理');
-vm.runInContext(inlineShootGroups.slice(inlineShootGroups.indexOf('shootGroups=function')),context);
-assert.equal(context.shootGroups().filter(group=>group.uses.some(use=>use.date==='2026-10-11')).length,7,'修正前の実表示経路は旧7件');
+vm.runInContext('shootGroups=function(){const groups=new Map();'+inlineShootGroups,context);
+assert.equal(context.shootGroups().filter(group=>group.uses.some(use=>use.date==='2026-10-11')).length,3,'旧postのメイン撮影は3件');
+assert.equal(context.storyPrepGroups([lineupPost]).length,4,'旧postのStory素材は別枠に残る');
 vm.runInContext(fs.readFileSync('dist/content-quality.js','utf8'),context);
 const results=cases.map(p=>context.createConcept(p.date,0));
 for(const p of results){
@@ -63,7 +65,7 @@ assert.equal(forced.caption,'以前の汎用本文');
 assert.equal(forced.contentQualityVersion,undefined);
 assert.equal(context.hasAuthoritativeShots(lineupPost),false);
 assert.equal(context.specificShootDirections(lineupPost),lineupPost.shots,'旧postは一般fallback');
-assert.equal(context.shootGroups().filter(group=>group.uses.some(use=>use.date==='2026-10-11')).length,7,'旧postのStory素材追加は維持');
+assert.equal(context.shootGroups().filter(group=>group.uses.some(use=>use.date==='2026-10-11')).length,3,'旧postは一般fallbackだけを使用');
 const shotProducts=[['new-a','new-b','restock-a','restock-b','restock-c','restock-d','restock-e','restock-f'],['new-a','new-b'],Array.from({length:12},(_,i)=>`mini-${i}`),['restock-g','restock-h','restock-i','restock-j','restock-k','restock-l']];
 lineupPost.shots=shotProducts.map((skuIds,i)=>({id:`confirmed-${i}`,signature:`confirmed-${i}`,media:'写真',what:`保存済み${i+1}カット目`,skuIds,count:1}));
 lineupPost.stories=lineupPost.stories.map((story,i)=>({...story,shotId:lineupPost.shots[i].id}));
@@ -73,6 +75,7 @@ assert.equal(context.specificShootDirections(lineupPost),lineupPost.shots);
 const authoritative=context.shootGroups().filter(group=>group.uses.some(use=>use.date==='2026-10-11'));
 assert.equal(authoritative.length,4);
 assert.ok(authoritative.every((group,i)=>group.what===lineupPost.shots[i].what&&JSON.stringify(group.skuIds)===JSON.stringify(shotProducts[i])));
+assert.equal(context.storyPrepGroups([lineupPost]).length,0,'有効なshotIdはStory準備に重複しない');
 lineupPost.shotsAuthoritative=false;
 assert.equal(context.shootGroups().filter(group=>group.uses.some(use=>use.date==='2026-10-11')).length,4);
 assert.equal(context.shootGroups().filter(group=>group.what==='別日の撮影').length,1);
