@@ -60,11 +60,24 @@
   function shots(p) {
     const [a,b,c] = points(p), product=p.skuIds.map(skuLabel).join('・') || ({CARE:'対象の革とケア道具',LEATHER:'種類の異なる革見本',CRAFT:'型紙と裁断前の革'}[p.topicGroup] || '革見本と製作道具'), media=p.format === 'Reel' ? '動画' : '写真';
     const cuts = [
-      [`${product}を自然光の作業台に置く`, '真上から全体と素材名が分かる距離で撮る', `${a}出発点を示す`],
-      [p.topicGroup === 'CARE' ? '革の端と使う予定のケア道具' : p.topicGroup === 'CRAFT' ? '型紙と裁断前後の革' : `${product}の手で触れる部分`, p.format === 'Reel' ? '手元を止めずに近づき、前後の状態を続けて撮る' : '同じ光で前後を並べ、差が読める寄りの写真を撮る', b],
-      [p.topicGroup==='CARE'?'手を止めて表面を確認する場面':p.topicGroup==='LEATHER'?'革見本を手に取り曲げる場面':`${product}を使う場面`, p.format === 'Reel' ? '手に取る動きから元の位置へ戻すまでを横から撮る' : '手に持った状態と置いた状態を同じ高さから撮る', c]
+      ['導入',a,'斜め45度',product,'主題が分かる箇所を手前に向ける'],
+      ['要点',b,'寄り',p.topicGroup === 'CARE' ? '革の端とケア道具' : p.topicGroup === 'CRAFT' ? '型紙を置いた裁断前の革' : `${product}の注目箇所`,'説明する箇所が隠れない向きにする'],
+      ['使う場面',c,p.format === 'Reel' ? '手元を横から' : '手元の高さ',p.topicGroup === 'LEATHER' ? '曲げた革見本' : product,'手に持つ・バッグ収納・机上のうち、企画に合う1場面を選ぶ']
     ];
-    return cuts.map(([what,how,why], i) => ({id:`${p.id}-quality-${i}`,signature:`quality|${p.id}|${i}`,media,what:`CUT${i+1}｜${what}。${how}。伝えること：${why}。`,skuIds:[...p.skuIds],count:1}));
+    if (/オンライン販売|POP\s*UP|発売・再販|ラインナップ/.test([p.theme,p.derivedTheme,p.role].filter(Boolean).join(' ')) && p.skuIds.length>=4) {
+      cuts.push(['商品一覧','複数の販売商品を種類ごとに見比べられるようにする','真上',product,'商品種類ごとにまとまりを作り、形が見える向きにする']);
+      if (p.skuIds.length>8) cuts.push(['注目商品','一覧で見えにくい商品の形を補足する','斜め45度',product,'一覧とは異なる角度から一つのまとまりを見せる']);
+    }
+    return cuts.map(([role,purpose,camera,subject,placement], i) => ({id:`${p.id}-quality-${i}`,signature:`quality|${p.id}|${i}`,media,what:`${i+1}カット目｜${role}\n目的：${purpose}\nカメラ：${camera}\n被写体：${subject}\n配置・向き：${placement}`,skuIds:[...p.skuIds],count:1}));
+  }
+  function lineupShots(p) {
+    const descriptions=[
+      ['表紙','11/8の販売ラインナップを一目で伝える','真上','DÉPLIÉ 2点＋再販品4〜6点','DÉPLIÉを中央、その周囲に再販品。財布の向きは揃えすぎず、2〜3方向に少し振る'],
+      ['NEW','DÉPLIÉ 2種類を新作として見せる','真上 または 斜め45度','DÉPLIÉ / horse、DÉPLIÉ / emboss dark brown','2点を完全な左右対称にはせず、片方を少し前へ。L字ファスナーの形が分かる向き'],
+      ['mini wallet','11/8に再販するmini walletのカラー数を見せる','完全な真上','11/8再販対象のmini wallet 12点','すべて同方向'],
+      ['その他の再販','mini wallet以外の再販商品をまとめて見せる','真上','Round zip wallet / chrome silver、Round zip wallet / DINO、Long Round zip wallet / DOODLE、Round coin purse / black、long wallet『yoni』 / Goya、long wallet『tiny』 / noir','2列×3段を基本。長財布2点は後列または左右端、Round coin purseなど小さい商品は中央寄り']
+    ];
+    return descriptions.map(([role,purpose,camera,subject,placement],i)=>({id:p.shots?.[i]?.id||`${p.id}-lineup-${i}`,signature:`lineup|${p.id}|${i}`,media:'写真',what:`${i+1}カット目｜${role}\n目的：${purpose}\nカメラ：${camera}\n被写体：${subject}\n配置・向き：${placement}${i===3?'\n任意：雰囲気を変えるなら、このカットのみ手持ち・バッグ収納・机上のいずれか1場面に変更してもよい。':''}`,skuIds:[...(p.skuIds||[])],count:1}));
   }
   function qualityIssues(p) {
     const texts=p.stories.map(s=>s.text||'');
@@ -74,7 +87,7 @@
     if (/最近のアンケートでは|回答が多く|お客様から.+という声/.test(p.caption) && !p.voiceIds?.length) issues.push('根拠のない顧客反応');
     if (p.stories.length!==4 || p.stories.some(s=>!s.text)) issues.push('Story不足');
     if (p.stories[1]?.participatory && (p.stories[1].options||[]).length>=2 && p.stories[1].kind==='質問スタンプ') issues.push('選択肢と回答形式の不一致');
-    if (p.shots.some(s=>s.media!==(p.format==='Reel'?'動画':'写真')||!s.what.includes('伝えること：'))) issues.push('撮影形式または意図が不足');
+    if (p.shots.some(s=>s.media!==(p.format==='Reel'?'動画':'写真')||!s.what.includes('目的：')||!s.what.includes('被写体：'))) issues.push('撮影形式または意図が不足');
     for (const [i,j] of [[0,2],[2,3]]) if (texts[i]===texts[j] || (p.stories[i].asset===p.stories[j].asset && p.stories[i].action===p.stories[j].action)) issues.push(`Story${i+1}と${j+1}の重複`);
     if (p.sequence.some(s=>!p.shots.some(c=>c.id===s.shotId))) issues.push('構成と撮影カットの不一致');
     return issues;
@@ -92,5 +105,21 @@
     if (issues.length) throw Error('新規投稿の品質確認が必要です：'+issues.join('、'));
     return p;
   };
-  specificShootDirections = function (p) { return p.contentQualityVersion===1 ? p.shots : previousShoot(p); };
+  specificShootDirections = function (p) { return p.date==='2026-10-11' ? lineupShots(p) : p.contentQualityVersion===1 ? p.shots : previousShoot(p); };
+  const previousShootGroups=shootGroups;
+  shootGroups=function () {
+    const posts=rangePosts().filter(p=>p.date==='2026-10-11'&&!p.paused&&!p.deleted&&!blocked(p.date));
+    const existing=previousShootGroups();
+    if (!posts.length) return existing;
+    const groups=existing.map(group=>({...group,uses:group.uses.filter(use=>use.date!=='2026-10-11')})).filter(group=>group.uses.length);
+    for (const post of posts) for (const shot of specificShootDirections(post)) groups.push({...shot,uses:[{id:post.id,date:post.date}]});
+    return groups;
+  };
+  const previousRenderShoot=renderShoot;
+  renderShoot=function () {
+    previousRenderShoot();
+    // The existing optional Story-material section must not reintroduce 10/11 shots.
+    const section=[...dx('#shootList').querySelectorAll('details')].find(el=>['過去素材で準備できるStory','追加撮影が不要なStory候補'].includes(el.querySelector('summary')?.textContent));
+    section?.querySelectorAll('p').forEach(el=>{if(el.textContent.trim().startsWith(planDay('2026-10-11')+' · '))el.remove();});
+  };
 })();

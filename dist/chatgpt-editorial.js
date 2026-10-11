@@ -378,5 +378,10 @@ document.addEventListener('submit',event=>{
  const post=demo.posts.find(p=>p.id===pendingManualStory.id);if(post&&(!post.manual||post.manualFields?.revision===post.revision)){post.manualFields||={};post.manualFields.stories||=[];post.manualFields.stories[pendingManualStory.index]=true;post.manualFields.revision=post.revision+1;}
  pendingManualStory=null;
 },true);
+const shootRules='shotsは通常3カットを基本とし、オンライン販売案内・POP UP案内・複数商品の発売／再販ラインナップで商品数を見せる必要がある場合だけ4〜5カットにしてください。各whatは「○カット目｜役割」「目的：」「カメラ：」「被写体：」「配置・向き：」を基本とし、曖昧な「並べる」「撮る」だけで終えないでください。場所・背景・余白率・厳密な距離は必要な場合だけ指定し、撮影者が構図を調整できる余地を残してください。1カットで手持ち・バッグ収納・机上など複数の異なる場面を要求せず、必要ならいずれか1場面を選んでください。撮り方が続く場合に限り、角度や持ち方を変える任意の助言を1行添えてください。';
+const shootPrompt=prompt;
+prompt=function(scope){const text=shootPrompt(scope);return scope==='ten-day'?text.replace('返答は説明文を付けずJSONだけにしてください。',shootRules+'\n\n返答は説明文を付けずJSONだけにしてください。'):text;};
+const shootSinglePrompt=singlePrompt;
+singlePrompt=function(post){return shootSinglePrompt(post)+'\n'+shootRules;};
 window.editorialPlanner={context,prompt,nextContext:nextEditorialContext,nextPrompt:nextEditorialPrompt,extract,validate,warnings,singleContext,singlePrompt,validateSingle,periodReview};refreshWork();
 })();
