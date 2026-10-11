@@ -29,6 +29,7 @@ const oldShots=JSON.stringify(post.shots),oldSequence=JSON.stringify(post.sequen
 preview(plan());
 assert.equal(JSON.stringify(post.shots),oldShots);
 assert.equal(JSON.stringify(post.sequence),oldSequence);
+assert.equal(post.shotsAuthoritative,undefined);
 assert.equal(post.theme,'新しいテーマ');
 // Removing an official reference only affects the edited post, including a stale legacy themeId.
 post.parentId='official-01';post.themeId='official-01';
@@ -52,14 +53,19 @@ for(const [label,mutate] of [
   assert.throws(()=>ctx.validateSingle({schema:ctx.SCHEMA,scope:ctx.SINGLE_SCOPE,plan:bad},post.date),undefined,label);
 }
 preview(shotPlan);
+assert.equal(post.shotsAuthoritative,true);
 assert.equal(post.shots.length,2);
 assert.equal(post.shots[1].skuIds[0],'sku-b');
 assert.equal(post.stories[2].shotId,post.shots[1].id);
 assert.deepEqual(post.sequence.map(item=>item.shotId),post.shots.map(shot=>shot.id));
 assert.equal(post.shots[0].signature,`single-editorial|${post.id}|${post.revision}|1`);
 assert.equal(ctx.saved.shots[1].what,'2カット目｜商品');
+const savedShots=JSON.stringify(post.shots);
 const reload=JSON.parse(JSON.stringify(ctx.saved));
 assert.equal(reload.stories[2].shotId,reload.shots[1].id);
+preview(plan());
+assert.equal(JSON.stringify(post.shots),savedShots);
+assert.equal(post.shotsAuthoritative,true);
 
 // The published shooting-list wrappers must consume these saved shots on 10/11.
 const list={innerHTML:'',insertAdjacentHTML(_position,text){this.innerHTML+=text;},querySelectorAll:()=>[]},badge={textContent:''};
@@ -84,4 +90,20 @@ assert.ok(!visible.some(group=>group.what==='旧撮影'));
 ui.renderShoot();
 assert.match(list.innerHTML,/2カット目｜商品/);
 assert.doesNotMatch(list.innerHTML,/旧撮影/);
-console.log('PASS single-day optional shots, validation, persistence, references, and published shooting list');
+
+// A ten-day import marks only a post whose shots were actually replaced.
+const imported={id:'ten-day-post',date:'2026-10-05',revision:1,shots:[oldShot],stories:[],sequence:[],skuIds:[]};
+const ten={demo:{posts:[imported]},displayedPeriod:'current',OFFICIAL_TOPICS:[],STORY_ROLES:['知る','参加','発見','導線'],structuredClone,window:{todo2SyncBridge:{read:()=>({}),flush:async()=>{}}},localStorage:{setItem(){}},MOCK_KEY:'qa',
+ importPeriod:()=>({from:'2026-10-05',to:'2026-10-14'}),validate:()=>[],qualityAudit:()=>({exposure:{issues:[]}}),importProtection:()=>({whole:false,meta:false,caption:false,stories:[false,false,false,false]}),
+ salesCycleBlock:()=>({nextFrom:'2026-10-05'}),persist(){},finishPreview(){},short:value=>value};
+vm.createContext(ten);
+vm.runInContext(between('async function savePreview(target)', 'function finishPreview('),ten);
+const tenPlan={date:imported.date,format:'Feed',primaryPurpose:'BUSINESS',themeId:null,mainTopic:'次回販売',customerValue:'確認できる',products:[],mainPostBody:'本文',CTA:'',shots:[{media:'写真',what:'確定カット',count:1,skuIds:[]}],
+ story1:{text:'1'},story2:{text:'2'},story3:{text:'3'},story4:{text:'4'}};
+ten.savePreview({data:{plans:[tenPlan]},period:{from:'2026-10-05',to:'2026-10-14'},revisions:{'2026-10-05':{id:imported.id,revision:imported.revision}},legacyChoices:{},exposureConfirmed:true}).then(()=>{
+  const saved=ten.demo.posts[0];
+  assert.equal(saved.shotsAuthoritative,true);
+  assert.equal(saved.shots[0].what,'確定カット');
+  assert.equal(saved.sequence[0].shotId,saved.shots[0].id);
+  console.log('PASS authoritative shots: ten-day and single-day save, legacy fallback, final UI');
+}).catch(error=>{console.error(error);process.exitCode=1;});
