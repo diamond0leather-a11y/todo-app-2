@@ -250,7 +250,7 @@ async function savePreview(target){
       for(const [i,story] of stories.entries())if(!lock.stories[i]&&story.shotId){story.shotId=sourceIds.get(story.shotId)||story.shotId;}
       base.shots=[...newShots,...oldShots.filter(shot=>protectedShotIds.has(shot.id))];
       base.shotsAuthoritative=true;
-      base.sequence=newShots.map((shot,i)=>({order:i+1,visual:shot.what,words:'',shotId:shot.id}));
+      base.sequence=newShots.map((shot,i)=>({order:i+1,words:'',shotId:shot.id}));
     }
     if(!lock.meta)Object.assign(base,{format:x.format,primaryAxis:x.primaryPurpose,parentId:topic?.id||null,themeId:topic?.id||null,topicGroup:topic?.group||null,theme:x.mainTopic,derivedTheme:x.mainTopic,takeaway:x.customerValue,cta:x.CTA||'',skuIds:[...(x.products||[])],researchRequired:!!topic?.researchRequired,researchSources:x.researchSources||[],researchVerified:topic?.number>=66&&topic.number<=80?target.researchConfirmed:false});
     Object.assign(base,{caption:lock.caption?base.caption:x.mainPostBody,stories,revision:(base.revision||0)+1,editorialSource:'chatgpt-import'});
@@ -317,7 +317,7 @@ function singleDayShotUpdate(post,plan,stories){
  const shots=plan.shots.map((shot,index)=>{const id=`${post.id}-single-shot-r${revision}-${index+1}`;if(shot.id)sourceIds.set(shot.id,id);return {...shot,id,signature:`single-editorial|${post.id}|${revision}|${index+1}`};});
  const linkedStories=stories.map(story=>story.shotId?{...story,shotId:sourceIds.get(story.shotId)}:story);
  if(linkedStories.some(story=>story.shotId===undefined&&Object.prototype.hasOwnProperty.call(story,'shotId')))throw Error('Storyの撮影IDが対象日のshotsに存在しません。');
- return {stories:linkedStories,shots,sequence:shots.map((shot,index)=>({order:index+1,visual:shot.what,words:'',shotId:shot.id}))};
+ return {stories:linkedStories,shots,sequence:shots.map((shot,index)=>({order:index+1,words:'',shotId:shot.id}))};
 }
 function planComparison(p,before){
  const topic=OFFICIAL_TOPICS.find(t=>t.id===p.themeId);

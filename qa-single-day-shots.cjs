@@ -58,6 +58,7 @@ assert.equal(post.shots.length,2);
 assert.equal(post.shots[1].skuIds[0],'sku-b');
 assert.equal(post.stories[2].shotId,post.shots[1].id);
 assert.deepEqual(post.sequence.map(item=>item.shotId),post.shots.map(shot=>shot.id));
+assert.ok(post.sequence.every(item=>!Object.hasOwn(item,'visual')));
 assert.equal(post.shots[0].signature,`single-editorial|${post.id}|${post.revision}|1`);
 assert.equal(ctx.saved.shots[1].what,'2カット目｜商品');
 const savedShots=JSON.stringify(post.shots);
@@ -105,5 +106,6 @@ ten.savePreview({data:{plans:[tenPlan]},period:{from:'2026-10-05',to:'2026-10-14
   assert.equal(saved.shotsAuthoritative,true);
   assert.equal(saved.shots[0].what,'確定カット');
   assert.equal(saved.sequence[0].shotId,saved.shots[0].id);
+  assert.equal(Object.hasOwn(saved.sequence[0],'visual'),false);
   console.log('PASS authoritative shots: ten-day and single-day save, legacy fallback, final UI');
 }).catch(error=>{console.error(error);process.exitCode=1;});
