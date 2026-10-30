@@ -1,0 +1,64 @@
+const assert=require('node:assert/strict');
+const fs=require('node:fs');
+const path=require('node:path');
+const vm=require('node:vm');
+
+const html=fs.readFileSync(path.join(__dirname,'dist/index.html'),'utf8');
+const section=(start,end)=>{const from=html.indexOf(start),to=html.indexOf(end,from);assert(from>=0&&to>from);return html.slice(from,to);};
+const helpers=section('function reviewRecordForTask(t){','function resultSummary(p){');
+const stateStart=html.lastIndexOf('function sevenDayComplete(r){');
+const state=html.slice(stateStart,html.indexOf('function reviewDisplayState(t){',stateStart));
+const inputs=section('function dailyInputs(now=Date.now()){','function homeReviewTasks(');
+const context={demo:{posts:[],records:{},months:{}},Date,RESULT_METRICS:{views:'再生',saves:'保存'},captureBand:(_t,r)=>r.captureBand||'期間内',jstDate:value=>new Date(new Date(value).getTime()+9*3600000).toISOString().slice(0,10),planDay:value=>value,actualPost:p=>p,dayAdd:()=>'',salesResult:()=>({}),endOfMonth:()=>'' ,newId:()=> 'legacy-id'};
+vm.runInNewContext(helpers+state+inputs,context);
+const post={id:'p1',date:'2026-10-18',actualAt:'2026-10-20T03:00:00.000Z',theme:'架空投稿'};
+context.demo.posts.push(post);
+const task=()=>({p:post,stage:'7d',key:'p1|7d',start:Date.parse(post.actualAt)+156*3600000,end:Date.parse(post.actualAt)+204*3600000});
+context.allTasks=()=>context.demo.posts.map(p=>({p,stage:'7d',key:p.id+'|7d',start:Date.parse(p.actualAt)+156*3600000,end:Date.parse(p.actualAt)+204*3600000}));
+const oldActual=post.actualAt;
+context.saveReviewRecord(task(),{postId:'p1',stage:'7d',views:10,saves:2,observedAt:'2026-10-27T12:00'});
+assert.equal(context.reviewRecordForTask(task()).saves,2);
+assert.equal(context.recordState(task()),'入力済み');
+assert.equal(context.dailyInputs(Date.parse('2026-10-27T12:00:00+09:00')).length,0);
+
+const nextActual='2026-10-21T03:00:00.000Z';
+context.preserveSevenDayBasis(post,nextActual);post.actualAt=nextActual;
+assert.equal(context.reviewRecordForTask(task()),undefined);
+assert.notEqual(context.recordState(task()),'入力済み');
+assert.equal(context.dailyInputs(Date.parse('2026-10-28T12:00:00+09:00')).length,1);
+assert.equal(context.demo.records['p1|7d'].saves,2,'old review remains stored');
+
+context.saveReviewRecord(task(),{postId:'p1',stage:'7d',views:12,saves:3,observedAt:'2026-10-28T12:00'});
+assert.equal(context.demo.records['p1|7d|'+oldActual].saves,2);
+assert.equal(context.reviewRecordForTask(task()).saves,3);
+post.actualAt=oldActual;
+assert.equal(context.reviewRecordForTask(task()).saves,2,'restoring the actual date restores its review');
+const reloaded=JSON.parse(JSON.stringify(context.demo));
+context.demo=reloaded;post.actualAt=nextActual;
+assert.equal(context.reviewRecordForTask(task()).saves,3,'both reviews survive reload');
+const sync=fs.readFileSync(path.join(__dirname,'dist/firebase-sync.js'),'utf8');
+const splitStart=sync.indexOf('function storyDayEntries('),splitEnd=sync.indexOf('async function readWorkspace(){',splitStart);
+assert(splitStart>=0&&splitEnd>splitStart);
+const shared=vm.runInNewContext("const clean=value=>JSON.parse(JSON.stringify(value));const safeId=value=>encodeURIComponent(String(value)).replaceAll('%2F','%252F');"+sync.slice(splitStart,splitEnd)+'\n({splitState,joinState})',{});
+const joined=shared.joinState(shared.splitState(context.demo));
+assert.equal(joined.records['p1|7d'].basisActualAt,nextActual);
+assert.equal(joined.records['p1|7d|'+oldActual].saves,2);
+
+const unsaved={id:'p2',date:'2026-10-18',actualAt:oldActual,theme:'未入力投稿'};
+context.demo.posts.push(unsaved);context.preserveSevenDayBasis(unsaved,nextActual);unsaved.actualAt=nextActual;
+assert.equal(context.demo.records['p2|7d'],undefined);
+assert.equal(context.dailyInputs(Date.parse('2026-10-28T12:00:00+09:00')).length,1);
+
+const legacy={postId:'p2',stage:'7d',saves:5,observedAt:'2026-10-27T12:00'};
+context.demo.records['p2|7d']=legacy;
+assert.equal(context.reviewRecordForTask({p:unsaved,stage:'7d',key:'p2|7d'}),undefined,'unbound legacy review is not assumed current');
+context.saveReviewRecord({p:unsaved,stage:'7d',key:'p2|7d'},{postId:'p2',stage:'7d',saves:6});
+assert.equal(context.demo.records['p2|7d|legacy|legacy-id'].saves,5,'unbound legacy review is archived, not deleted');
+const oldPost={id:'p3',actualAt:oldActual};
+context.demo.records['p3|7d']={postId:'p3',stage:'7d',saves:7};
+context.preserveSevenDayBasis(oldPost,nextActual);oldPost.actualAt=nextActual;
+assert.equal(context.demo.records['p3|7d'].basisActualAt,oldActual);
+assert.equal(context.reviewRecordForTask({p:oldPost,stage:'7d',key:'p3|7d'}),undefined);
+oldPost.actualAt=oldActual;
+assert.equal(context.reviewRecordForTask({p:oldPost,stage:'7d',key:'p3|7d'}).saves,7);
+console.log('PASS 7d basis: change, restore, missing record, legacy, reload, HOME input');

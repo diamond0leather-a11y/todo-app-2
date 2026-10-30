@@ -22,7 +22,7 @@ for(const file of ['three-axis.js','dist/index.html']){
   ],stories:[],format:'Feed',theme:'新規企画',derivedTheme:'新規企画'};
   const posts=[authoritative,quality,legacy],detail={markup:'',insertAdjacentHTML(_where,value){this.markup+=value;}};
   const context={demo:{posts},oldShowPost(){},dax:()=>[],dx:selector=>selector==='#dayDetail'?detail:{close(){}},
-    html:value=>String(value??''),topicLabel:()=>'',AXES:{},OFFICIAL_TOPICS:[],
+    html:value=>String(value??''),topicLabel:()=>'',AXES:{},OFFICIAL_TOPICS:[],ALL_OFFICIAL_TOPICS:[],officialTopicOptions:()=>[],officialTopicById:()=>null,
     formSelect:()=>'',formInput:()=>'',openForm(_title,markup,save){context.form={markup,save};}};
   vm.createContext(context);
   vm.runInContext(fs.readFileSync('dist/content-quality.js','utf8').split('(function () {')[0],context);
@@ -62,7 +62,7 @@ for(const file of ['three-axis.js','dist/index.html']){
   assert.equal(legacy.shots[0].what,'旧shot内容');
   const monthly=fs.readFileSync('dist/period-planner.js','utf8').split(/\r?\n/).find(line=>line.startsWith('function monthlyMetadata(post)'));
   assert.ok(monthly,`${file}: 月間メタデータ`);
-  const metadataContext={demo:{posts},sku:()=>null,OFFICIAL_TOPICS:[],isModernPost:context.isModernPost};
+  const metadataContext={demo:{posts},sku:()=>null,OFFICIAL_TOPICS:[],ALL_OFFICIAL_TOPICS:[],isModernPost:context.isModernPost};
   quality.skuIds=[];legacy.skuIds=[];
   vm.createContext(metadataContext);
   vm.runInContext(monthly,metadataContext);

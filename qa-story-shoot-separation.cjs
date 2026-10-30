@@ -15,6 +15,7 @@ const legacy={id:'legacy',date:'2026-10-12',theme:'旧投稿',shots:[shot('old-m
 const other={id:'other',date:'2026-10-13',theme:'別日の正本',shotsAuthoritative:true,shots:[shot('other-main',['other'])],stories:[]};
 const posts=[lineup,legacy,other],list={innerHTML:'',insertAdjacentHTML(_position,value){this.innerHTML+=value;}},badge={textContent:''};
 const context={demo:{shotDone:{}},rangePosts:()=>posts,blocked:()=>false,specificShootDirections:p=>p===legacy?[{...p.shots[0],what:'一般fallback'}]:p.shots,
+  shotGroupDone:group=>group.members.every(shot=>!!context.demo.shotDone[shot.signature]),
   renderShoot(){},createConcept(){},makeStories(){},skuLabel:id=>id,html:value=>String(value),planDay:date=>date,
   dx:selector=>selector==='#shootList'?list:selector==='#shootProgressBadge'?badge:null};
 vm.createContext(context);

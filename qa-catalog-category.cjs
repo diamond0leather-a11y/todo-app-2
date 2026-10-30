@@ -93,6 +93,7 @@ assert.equal(state.items.at(-1).categoryId, created.id, 'new item belongs to new
 assert.match(nodes['#catalogListWork'].innerHTML, /DÉPLIÉ compact wallet/, 'new item renders within category');
 
 vm.runInContext(section(syncSource, 'const clean=', 'const status='), context);
+vm.runInContext(section(syncSource, 'function storyDayEntries(', 'function splitState('), context);
 vm.runInContext(section(syncSource, 'function splitState(', 'async function readWorkspace('), context);
 const docs = context.splitState(state);
 assert.equal(docs.get('state/products').value.categories.length, oldCategories.length + 1, 'shared products includes all categories');

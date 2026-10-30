@@ -26,19 +26,25 @@ function renderStory1Alternatives(){
   const extras=dx('#dailyExtras');if(!extras)return;
   let section=dx('#story1Alternatives');
   if(!section){section=document.createElement('section');section.id='story1Alternatives';section.className='card';extras.after(section);}
-  const post=demo.posts.find(p=>p.date===TODAY&&!p.paused&&!p.deleted);
-  if(!post||!post.stories?.length){section.hidden=true;return;}
+  const post=demo.posts.find(p=>p.stories?.some((story,index)=>(story.slot??index+1)===1&&(story.date??p.date)===TODAY));
+  const standalone=!post&&demo.storyDays?.find(story=>story.date===TODAY&&story.slot===1);
+  if(!post&&!standalone){section.hidden=true;return;}
+  const target=post||{id:standalone.id,date:TODAY,stories:[standalone]};
   section.hidden=false;
-  section.innerHTML=`<h3>Story1 サブ候補</h3><p class="tiny muted">今日のStory1だけを差し替えます。出典と写真の使用権を投稿前に確認してください。</p>${post.actualAt?'<p class="notice">投稿済みのため差し替えできません。</p>':''}`+story1Alternatives(post).map(candidate=>`<article class="story1-alternative"><span class="badge">${html(candidate.genre)}</span><h4>${html(candidate.title)}</h4><p class="tiny muted">${html(candidate.summary)}</p><p class="story-text">${html(candidate.body)}</p><p><strong>写真：</strong>${html(candidate.imageInstruction)}</p><p class="tiny">出典：<a href="${html(candidate.sourceUrl)}" target="_blank" rel="noopener noreferrer">${html(candidate.sourceName)}</a></p><button class="secondary full" data-story1-alternative="${candidate.id}" data-story1-post="${post.id}" ${post.actualAt?'disabled':''}>この案に変更</button></article>`).join('');
+  section.innerHTML=`<h3>Story1 サブ候補</h3><p class="tiny muted">今日のStory1だけを差し替えます。出典と写真の使用権を投稿前に確認してください。</p>`+story1Alternatives(target).map(candidate=>`<article class="story1-alternative"><span class="badge">${html(candidate.genre)}</span><h4>${html(candidate.title)}</h4><p class="tiny muted">${html(candidate.summary)}</p><p class="story-text">${html(candidate.body)}</p><p><strong>写真：</strong>${html(candidate.imageInstruction)}</p><p class="tiny">出典：<a href="${html(candidate.sourceUrl)}" target="_blank" rel="noopener noreferrer">${html(candidate.sourceName)}</a></p><button class="secondary full" data-story1-alternative="${candidate.id}" data-story1-post="${target.id}">この案に変更</button></article>`).join('');
 }
 function applyStory1Alternative(postId,candidateId){
-  const post=demo.posts.find(p=>p.id===postId&&p.date===TODAY&&!p.deleted&&!p.paused);
-  const candidate=story1Alternatives(post||{date:TODAY,stories:[]}).find(c=>c.id===candidateId);
-  if(!post||post.actualAt||!post.stories?.length||!candidate)return false;
+  const post=demo.posts.find(p=>p.id===postId&&p.stories?.some((story,index)=>(story.slot??index+1)===1&&(story.date??p.date)===TODAY));
+  const standalone=!post&&demo.storyDays?.find(story=>story.id===postId&&story.date===TODAY&&story.slot===1);
+  const holder=post||standalone&&{id:standalone.id,date:standalone.date,stories:[standalone],storyReplacementHistory:standalone.replacementHistory||[]};
+  const candidate=story1Alternatives(holder||{date:TODAY,stories:[]}).find(c=>c.id===candidateId);
+  if(!holder||!candidate)return false;
   const replacement={slot:1,purpose:STORY_ROLES[0],theme:candidate.title,title:candidate.title,summary:candidate.summary,angle:candidate.summary,text:candidate.body,body:candidate.body,asset:candidate.imageInstruction,imageInstruction:candidate.imageInstruction,sourceName:candidate.sourceName,sourceUrl:candidate.sourceUrl,genre:candidate.genre,alternativeId:candidate.id,action:'出典を読んで、気になった点を見つける',skuIds:[],participatory:false,materialMode:'新規撮影必要',manual:true,storySpecVersion:4};
-  post.stories=[...post.stories];post.stories[0]=replacement;
-  post.revision=(post.revision||0)+1;
-  persist();storyDrafts.delete(post.id);refreshWork();toast('今日のStory1だけ変更しました');
+  const prepared=prepareStoryReplacement(holder,1,replacement,demo.reactions);
+  if(!prepared.ok){toast(prepared.reason);return false;}
+  if(post){const index=post.stories.findIndex((story,i)=>(story.slot??i+1)===1&&(story.date??post.date)===TODAY);post.stories=[...post.stories];post.stories[index]=prepared.story;post.storyReplacementHistory=prepared.history;post.manual=true;post.revision=(post.revision||0)+1;storyDrafts.delete(post.id);}
+  else{demo.storyDays[demo.storyDays.findIndex(story=>story.id===standalone.id)]={...prepared.story,replacementHistory:prepared.history};}
+  persist();refreshWork();toast('今日のStory1だけ変更しました');
   return true;
 }
 const story1OriginalDraft=currentStoryDraft;

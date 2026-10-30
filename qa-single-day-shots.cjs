@@ -3,12 +3,13 @@ const fs = require('node:fs');
 const vm = require('node:vm');
 
 const editorial = fs.readFileSync('dist/chatgpt-editorial.js', 'utf8');
+const page = fs.readFileSync('dist/index.html', 'utf8');
 const between = (start, end) => editorial.slice(editorial.indexOf(start), editorial.indexOf(end));
 const oldShot = {id:'old-shot',media:'写真',what:'旧撮影',count:1,skuIds:['sku-a']};
 const post = {id:'post-11',date:'2026-10-11',revision:1,shots:[oldShot],sequence:[{order:1,visual:'旧撮影',shotId:'old-shot'}],stories:[{text:'旧Story'}],skuIds:['sku-a']};
 const ctx = {
-  demo:{posts:[post]},SCHEMA:'test-schema',SINGLE_SCOPE:'single-day-reproposal',
-  OFFICIAL_TOPICS:[{id:'official-01',group:'LEATHER'}],validAxes:['BUSINESS'],STORY_ROLES:['知る','参加','発見','導線'],
+  demo:{posts:[post]},V7StoryState:require('./dist/v7-story-state.js'),SCHEMA:'test-schema',SINGLE_SCOPE:'single-day-reproposal',
+  OFFICIAL_TOPICS:[{id:'official-01',group:'LEATHER'}],V7_OFFICIAL_TOPICS:[{id:'v7-official-01',group:'革を知る'}],ALL_OFFICIAL_TOPICS:[{id:'official-01',group:'LEATHER'},{id:'v7-official-01',group:'革を知る'}],validAxes:['BUSINESS'],STORY_ROLES:['知る','参加','発見','導線'],
   sku:id=>['sku-a','sku-b'].includes(id)?{id}:null,blocked:()=>false,cycleDay:()=> 'Day7',story2Issue:()=>'',
   protectedPost:()=>false,html:value=>String(value),short:value=>value,planComparison:()=>'',
   openForm(_title,_body,save){ctx.save=save;},dx:()=>({close(){},textContent:'',type:'button'}),
@@ -16,11 +17,12 @@ const ctx = {
   periodReview:()=>[],rangePosts:()=>[]
 };
 vm.createContext(ctx);
+vm.runInContext('const newId=()=>"qa-story-"+(++globalThis.storyIdCounter);globalThis.storyIdCounter=0;'+page.slice(page.indexOf('function storyDate('),page.indexOf('function dayAdd(')),ctx);
 vm.runInContext(between('function validateEditorialShots(', 'function validate(data)'),ctx);
 vm.runInContext(between('function validateSingle(data,date)', 'function planComparison('),ctx);
 vm.runInContext(between('function showSinglePreview()', 'function openSingleImport('),ctx);
 
-const plan = () => ({date:post.date,format:'Feed',primaryPurpose:'BUSINESS',themeId:'official-01',themeCategory:'LEATHER',mainTopic:'新しいテーマ',customerValue:'価値',mainPostBody:'新しい本文',products:['sku-a'],CTA:null,
+const plan = () => ({date:post.date,format:'Feed',primaryPurpose:'BUSINESS',themeId:'v7-official-01',themeCategory:'革を知る',mainTopic:'新しいテーマ',customerValue:'価値',mainPostBody:'新しい本文',products:['sku-a'],CTA:null,
   story1:{text:'Story1',materialMode:'過去素材使用可'},story2:{text:'Story2',materialMode:'過去素材使用可'},story3:{text:'Story3',materialMode:'過去素材使用可'},story4:{text:'Story4',materialMode:'過去素材使用可'}});
 const preview = input => {ctx.singlePreview={postId:post.id,before:{},after:input,revision:post.revision};ctx.showSinglePreview();ctx.save();};
 
@@ -70,7 +72,7 @@ assert.equal(post.shotsAuthoritative,true);
 
 // The published shooting-list wrappers must consume these saved shots on 10/11.
 const list={innerHTML:'',insertAdjacentHTML(_position,text){this.innerHTML+=text;},querySelectorAll:()=>[]},badge={textContent:''};
-const ui={demo:{reactions:[],shotDone:{}},OFFICIAL_TOPICS:[],sku:()=>null,skuLabel:id=>id,storyKeywords:()=>[],html:value=>String(value),
+const ui={demo:{reactions:[],shotDone:{}},OFFICIAL_TOPICS:[],V7_OFFICIAL_TOPICS:[],ALL_OFFICIAL_TOPICS:[],sku:()=>null,skuLabel:id=>id,storyKeywords:()=>[],html:value=>String(value),
   specificShootDirections:p=>p.shots,shootGroups:()=>[],rangePosts:()=>[reload],blocked:()=>false,
   renderShoot:()=>{},dx:selector=>selector==='#shootList'?list:selector==='#shootProgressBadge'?badge:{querySelectorAll:()=>[]},planDay:date=>date,
   createConcept:()=>({}),makeStories:()=>[]};
@@ -79,9 +81,9 @@ const htmlSource=fs.readFileSync('dist/index.html','utf8');
 const actualRender=htmlSource.split('const salesRenderShoot=renderShoot;')[1]?.split('const salesHome=renderHome;')[0];
 assert.ok(actualRender);
 vm.runInContext('renderShoot=function'+actualRender.split('renderShoot=function')[1],ui);
-const inline=htmlSource.split('\nshootGroups=function(){const groups=new Map();').at(-1)?.split('const salesRenderShoot=renderShoot;')[0];
-assert.ok(inline);
-vm.runInContext('shootGroups=function(){const groups=new Map();'+inline,ui);
+const shotHelpers=htmlSource.slice(htmlSource.indexOf('function shotDoneKey('),htmlSource.indexOf('const salesRenderShoot=renderShoot;'));
+assert.match(shotHelpers,/function shotGroupDone\(/);
+vm.runInContext(shotHelpers,ui);
 vm.runInContext(fs.readFileSync('dist/content-quality.js','utf8'),ui);
 assert.equal(ui.specificShootDirections(reload),reload.shots);
 const visible=ui.shootGroups().filter(group=>group.uses.some(use=>use.date===post.date));
@@ -94,14 +96,17 @@ assert.doesNotMatch(list.innerHTML,/旧撮影/);
 
 // A ten-day import marks only a post whose shots were actually replaced.
 const imported={id:'ten-day-post',date:'2026-10-05',revision:1,shots:[oldShot],stories:[],sequence:[],skuIds:[]};
-const ten={demo:{posts:[imported]},displayedPeriod:'current',OFFICIAL_TOPICS:[],STORY_ROLES:['知る','参加','発見','導線'],structuredClone,window:{todo2SyncBridge:{read:()=>({}),flush:async()=>{}}},localStorage:{setItem(){}},MOCK_KEY:'qa',
+const ten={demo:{posts:[imported],storyDays:[],reactions:[]},displayedPeriod:'current',OFFICIAL_TOPICS:[],V7_OFFICIAL_TOPICS:[],ALL_OFFICIAL_TOPICS:[],STORY_ROLES:['知る','参加','発見','導線'],structuredClone,window:{todo2SyncBridge:{read:()=>({}),flush:async()=>{}}},localStorage:{setItem(){}},MOCK_KEY:'qa',
+ V7StoryState:require('./dist/v7-story-state.js'),
  importPeriod:()=>({from:'2026-10-05',to:'2026-10-14'}),validate:()=>[],qualityAudit:()=>({exposure:{issues:[]}}),importProtection:()=>({whole:false,meta:false,caption:false,stories:[false,false,false,false]}),
  salesCycleBlock:()=>({nextFrom:'2026-10-05'}),persist(){},finishPreview(){},short:value=>value};
 vm.createContext(ten);
+vm.runInContext('const newId=()=>"qa-ten-story-"+(++globalThis.storyIdCounter);globalThis.storyIdCounter=0;'+page.slice(page.indexOf('function storyDate('),page.indexOf('function dayAdd(')),ten);
+vm.runInContext(between('function editorialPostForDate(', 'function validateEditorialShots('),ten);
 vm.runInContext(between('async function savePreview(target)', 'function finishPreview('),ten);
 const tenPlan={date:imported.date,format:'Feed',primaryPurpose:'BUSINESS',themeId:null,mainTopic:'次回販売',customerValue:'確認できる',products:[],mainPostBody:'本文',CTA:'',shots:[{media:'写真',what:'確定カット',count:1,skuIds:[]}],
  story1:{text:'1'},story2:{text:'2'},story3:{text:'3'},story4:{text:'4'}};
-ten.savePreview({data:{plans:[tenPlan]},period:{from:'2026-10-05',to:'2026-10-14'},revisions:{'2026-10-05':{id:imported.id,revision:imported.revision}},legacyChoices:{},exposureConfirmed:true}).then(()=>{
+ten.savePreview({data:{plans:[tenPlan]},period:{from:'2026-10-05',to:'2026-10-14'},revisions:{'2026-10-05':{id:imported.id,revision:imported.revision}},storySnapshot:{'2026-10-05':[[],[],[],[]]},approvals:{'2026-10-05':{v7Selection:true,createPost:false,meta:false,caption:false,cta:false,products:false,shots:true,stories:[]}},legacyChoices:{},exposureConfirmed:true}).then(()=>{
   const saved=ten.demo.posts[0];
   assert.equal(saved.shotsAuthoritative,true);
   assert.equal(saved.shots[0].what,'確定カット');

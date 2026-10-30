@@ -16,24 +16,30 @@ assert(!html.includes('demo=seedMock()'));
 assert(!html.includes('if(!demo.posts.length){for(let i=-12'));
 assert(!html.includes("salesHistory.push({id:'sale-history-demo-202605'"));
 assert(!fs.readFileSync(path.join(root,'story-sales.js'),'utf8').includes("salesHistory.push({id:'sale-history-demo-202605'"));
-assert(html.includes('if(demo.posts.some(p=>p.briefId===b.id||p.themeId===b.id)'));
-assert(fs.readFileSync(path.join(root,'three-axis.js'),'utf8').includes('if(demo.posts.some(p=>p.briefId===b.id||p.themeId===b.id)'));
-const blankMatch=html.match(/if\(!demo\|\|demo\.schema!==1\)demo=(\{[^;]+\});/);
-assert(blankMatch,'fresh-state initializer');
-const blank=vm.runInNewContext('('+blankMatch[1]+')',{TODAY:'2026-09-29'});
+assert(html.includes('if(!demo.posts.some(p=>p.briefId===b.id))'),'legacy brief reuse remains a planning signal');
+assert(fs.readFileSync(path.join(root,'three-axis.js'),'utf8').includes('if(!demo.posts.some(p=>p.briefId===b.id))'));
+assert(html.includes('return V7_OFFICIAL_TOPICS.map(topic=>'),'new post topics use only v7 IDs');
+const blankCode=between(html,'function emptyV7State(){','let demo;');
+assert(html.includes('if(!demo||demo.schema!==1)demo=emptyV7State();'),'fresh-state initializer');
+const blank=vm.runInNewContext(blankCode+'\nemptyV7State()', {TODAY:'2026-09-29'});
 for(const key of ['categories','items','skus','events','posts','ads','reactions','analyses'])assert.equal(blank[key].length,0,key);
 assert.equal(Object.keys(blank.months).length,0);
 assert.equal(Object.keys(blank.records).length,0);
 const migrateCode=between(html,'function migrateConcepts(){','const feedReelConcept=createConcept;');
 const fresh=structuredClone(blank);
-vm.runInNewContext(migrateCode+'\nmigrateConcepts()',{demo:fresh,OFFICIAL_TOPICS:[],BRIEFS:[{id:'sample',title:'仮案'}],blocked:()=>false,createConcept:()=>{throw Error('fresh state must not generate a plan');},persist:()=>{}});
+vm.runInNewContext(migrateCode+'\nmigrateConcepts()',{demo:fresh,ALL_OFFICIAL_TOPICS:[],BRIEFS:[{id:'sample',title:'仮案'}],blocked:()=>false,createConcept:()=>{throw Error('fresh state must not generate a plan');},persist:()=>{}});
 assert.equal(fresh.posts.length,0);
 assert.equal(fresh.extraThemes.length,0);
-assert.equal(fresh.conceptVersion,2);
+assert.equal(fresh.conceptVersion,blank.conceptVersion,'fresh state is not silently migrated');
+const historical=structuredClone(blank);
+historical.posts.push({id:'legacy-post',parentId:'official-21',topicGroup:'ANIMAL',theme:'牛革の特徴'});
+vm.runInNewContext(migrateCode+'\nmigrateConcepts()',{demo:historical,ALL_OFFICIAL_TOPICS:[],BRIEFS:[],blocked:()=>false});
+assert.equal(historical.posts[0].parentId,'official-21','legacy theme ID stays unchanged');
+assert.equal(historical.posts[0].theme,'牛革の特徴','legacy title stays unchanged');
 
 // Exercise the actual sales form save callbacks without a DOM dependency.
 function salesHarness(source){
- const code=between(source,'function salesResult(month){','const priceSkuEdit=')+between(source,'function numberOrBlank(raw){','renderReviewWork=');
+ const code=between(source,'function saleRoot(month){','const priceSkuEdit=')+between(source,'function numberOrBlank(raw){','renderReviewWork=');
  const demo={categories:[{id:'c',name:'財布'}],items:[{id:'i',categoryId:'c',name:'商品'}],skus:[{id:'a',itemId:'i',name:'A',price:100,restockDate:'2026-10-04'},{id:'b',itemId:'i',name:'B',price:200,status:'selling'},{id:'nov',itemId:'i',name:'11月',restockDate:'2026-11-08'},{id:'dec',itemId:'i',name:'12月',restockDate:'2026-12-06'},{id:'sep',itemId:'i',name:'9月',restockDate:'2026-09-06'},{id:'always',itemId:'i',name:'販売停止',status:'soldout'}],months:{'2026-10':{date:'2026-10-04',lineup:[{skuId:'a',saleKind:'再販'},{skuId:'b',saleKind:'新発売'},{skuId:'nov',saleKind:'再販'},{skuId:'dec',saleKind:'再販'},{skuId:'sep',saleKind:'再販'},{skuId:'always',saleKind:'常時販売'}]}},salesResults:{}};
  let save,body;const form={querySelector:()=>({}),addEventListener:()=>{}};
  const ctx={demo,structuredClone,Map,openForm:(_title,markup,fn)=>{body=markup;save=fn;},dx:()=>form,sku:id=>demo.skus.find(s=>s.id===id),activeCatalogSku:s=>!s.deleted&&demo.items.some(i=>i.id===s.itemId&&!i.deleted&&demo.categories.some(c=>c.id===i.categoryId&&!c.deleted)),skuLabel:id=>id,monthInfo:month=>demo.months[month],short:d=>d.slice(5),formInput:(label,name,value)=>`${label}:${name}=${value};`,formSelect:()=>'',html:s=>s,fmt:value=>String(value??''),nowISO:()=> '2026-10-31T12:00:00Z',FormData:class{}};
@@ -69,13 +75,13 @@ function salesHarness(source){
 }
 const sourceState=salesHarness(daily);
 salesHarness(html);
-const targetMonthWrapper=between(daily,'const targetMonthRender=renderMonthWork;','document.addEventListener(');
+const targetMonthWrapper=between(daily,'const targetMonthRender=renderMonthWork;','const datedSalesHomeRender=renderHome;');
 assert(html.includes(targetMonthWrapper),'public monthly target count matches source');
 {
  const nodes={'#monthSaleSummary':{innerHTML:''},'#saleWork':{textContent:''}},rows=[{skuId:'a'},{skuId:'b'}];
  vm.runInNewContext(targetMonthWrapper+'renderMonthWork()',{renderMonthWork:()=>{},monthCursor:'2026-10',monthInfo:()=>({date:'2026-10-04',time:'21:00'}),monthlyResultRows:()=>rows,dx:key=>nodes[key],short:d=>d.slice(5)});
  assert(nodes['#monthSaleSummary'].innerHTML.includes('販売対象：2SKU'),'monthly header uses initial-sales row count');
- assert.equal(nodes['#saleWork'].textContent,'販売対象2SKUを確認','monthly button says what it opens');
+ assert.equal(nodes['#saleWork'].textContent,'販売対象を確認（2件）','monthly button says what it opens');
 }
 
 // Sales results are the source of truth for history; legacy manual history remains intact.
@@ -145,7 +151,7 @@ assert(html.includes('for(const el of currentStatus.querySelectorAll(\'[name^="s
 }
 
 // The same complete state is split for sharing and rejoined from mock Firestore documents.
-const sharedCode=between(sync,'function splitState(state){','async function readWorkspace()');
+const sharedCode=between(sync,'function storyDayEntries(','async function readWorkspace()');
 const share=new Function('state','clean','safeId',sharedCode+'\nconst docs=splitState(state);return {docs,reloaded:joinState(docs)};');
 const state={...sourceState,posts:[{id:'post-a',date:'2026-10-05',actualAt:'2026-10-05T18:00:00+09:00'}],records:{'post-a|7d':{postId:'post-a',views:0,reach:null}},reactions:[{id:'voice-a',voiceType:'商品要望',originalText:'要望'}],shotDone:{'shot-a':true},salesHistory:[{id:'sale-a'}],salePlans:{a:{month:'2027-01'}}};
 const {docs,reloaded}=share(state,structuredClone,encodeURIComponent);
@@ -173,10 +179,10 @@ const bandCode=between(html,'function captureBand(t,r){','function resultSummary
 const captureBand=vm.runInNewContext(bandCode+'\ncaptureBand',{Date});
 const planCode=between(html,'function planContext(date){','function chooseAxis(c){');
 const planContext=vm.runInNewContext(planCode+'\nplanContext',{demo:learningDemo,salesContext:()=>({until:daysUntilSale,next:{lineup:[]}}),resultSummary:()=>({sevenDay:{views:1}}),voiceCandidates:()=>[],Date});
-const learningCtx={demo:learningDemo,effectiveSalesHistory:effectiveLearningHistory,TODAY:'2026-10-05',SCHEMA:'cian-editorial-v1',OFFICIAL_TOPICS:[],validAxes:['CUSTOMER_VALUE','INSTAGRAM_GROWTH','BUSINESS'],RESULT_METRICS:{views:'再生',reach:'リーチ'},dayAdd:addDays,dayDiff:(to,from)=>(Date.parse(to)-Date.parse(from))/86400000,cycleDay:()=> 'Day1',blocked:()=>false,salesCycleBlock:()=>({from:'2026-10-05',to:'2026-10-14',nextFrom:'2026-10-15',nextTo:'2026-10-24',nextDayFrom:11}),planContext,allTasks:()=>tasks,recordState:t=>records[t.key]?'入力済み':'入力待ち',captureBand,nextPlanFeedbackContext:()=>feedback,exposureSummary:()=>({}),productContext:()=>[],monthlySaleStrategy:()=>[],rangePosts:()=>[],cycleData:month=>({month}),Date};
+const learningCtx={demo:learningDemo,V7StoryState:require('./dist/v7-story-state.js'),effectiveSalesHistory:effectiveLearningHistory,TODAY:'2026-10-05',SCHEMA:'cian-editorial-v1',OFFICIAL_TOPICS:[],V7_OFFICIAL_TOPICS:[],LEGACY_OFFICIAL_TOPICS:[],ALL_OFFICIAL_TOPICS:[],validAxes:['CUSTOMER_VALUE','INSTAGRAM_GROWTH','BUSINESS'],RESULT_METRICS:{views:'再生',reach:'リーチ'},dayAdd:addDays,dayDiff:(to,from)=>(Date.parse(to)-Date.parse(from))/86400000,cycleDay:()=> 'Day1',blocked:()=>false,salesCycleBlock:()=>({from:'2026-10-05',to:'2026-10-14',nextFrom:'2026-10-15',nextTo:'2026-10-24',nextDayFrom:11}),planContext,allTasks:()=>tasks,reviewRecordForTask:t=>records[t.key],recordState:t=>records[t.key]?'入力済み':'入力待ち',captureBand,nextPlanFeedbackContext:()=>feedback,exposureSummary:()=>({}),productContext:()=>[],monthlySaleStrategy:()=>[],rangePosts:()=>[],cycleData:month=>({month}),Date};
 const learning=vm.runInNewContext(editorialCode+'\n({context,postHistories,reviewContext,feedbackContext})',learningCtx);
 const actualChoiceCode=between(fs.readFileSync(path.join(root,'three-axis.js'),'utf8'),'function reviewActualChoice(p,f){','function reviewActualRecord(key,recordForm){');
-const actualChoice=vm.runInNewContext(actualChoiceCode+'\nreviewActualChoice',{OFFICIAL_TOPICS:[],demo:learningDemo,structuredClone,nowISO:()=> '2026-09-29T00:00:00Z'});
+const actualChoice=vm.runInNewContext(actualChoiceCode+'\nreviewActualChoice',{OFFICIAL_TOPICS:[],ALL_OFFICIAL_TOPICS:[],demo:learningDemo,structuredClone,nowISO:()=> '2026-09-29T00:00:00Z'});
 const beforeActual=JSON.stringify(posts[21]);
 const snapshot=actualChoice(posts[21],{get:key=>key==='reviewActualChoice'?'planned':null,getAll:()=>[]});
 assert.equal(snapshot.theme,'予定21');

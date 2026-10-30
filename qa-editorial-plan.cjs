@@ -6,7 +6,7 @@ const source=fs.readFileSync('dist/chatgpt-editorial.js','utf8');
 const section=(from,to)=>source.slice(source.indexOf(from),source.indexOf(to));
 const date='2026-10-11';
 const ctx={SCHEMA:'cian-editorial-v1',SINGLE_SCOPE:'single-day-reproposal',
- OFFICIAL_TOPICS:[{id:'official-01',group:'LEATHER'}],validAxes:['BUSINESS'],
+ OFFICIAL_TOPICS:[{id:'official-01',group:'LEATHER'}],V7_OFFICIAL_TOPICS:[{id:'v7-official-01',group:'革を知る'}],ALL_OFFICIAL_TOPICS:[{id:'official-01',group:'LEATHER'},{id:'v7-official-01',group:'革を知る'}],validAxes:['BUSINESS'],
  sku:id=>id==='sku-a'?{id}:null,blocked:()=>false,short:value=>value,
  cycleDay:()=> 'Day7',dayDiff:(left,right)=>(Date.parse(left+'T00:00:00Z')-Date.parse(right+'T00:00:00Z'))/86400000,dayAdd:(value,days)=>new Date(Date.parse(value+'T00:00:00Z')+days*86400000).toISOString().slice(0,10),
  importPeriod:()=>({from:'2026-10-05',to:'2026-10-14',dayFrom:1}),warnings:()=>[],
@@ -19,7 +19,7 @@ const original=ctx.validateEditorialPlan;
 let sharedCalls=0;
 ctx.validateEditorialPlan=(...args)=>{sharedCalls++;return original(...args);};
 
-const plan=()=>({date,dayNumber:7,format:'Feed',primaryPurpose:'BUSINESS',customerValue:'商品を比較できる',themeId:'official-01',themeCategory:'LEATHER',mainTopic:'新商品の紹介',angle:'形を見る',products:['sku-a'],mainPostBody:'商品の形を具体的に紹介します。'.repeat(30),
+const plan=()=>({date,dayNumber:7,format:'Feed',primaryPurpose:'BUSINESS',customerValue:'商品を比較できる',themeId:'v7-official-01',themeCategory:'革を知る',mainTopic:'新商品の紹介',angle:'形を見る',products:['sku-a'],mainPostBody:'商品の形を具体的に紹介します。'.repeat(30),
  story1:{text:'今のファッションを知る',asset:'写真',materialMode:'新規撮影必要',action:'読む'},
  story2:{text:'どちらを詳しく見たいですか？',kind:'アンケート',options:['外側','内側'],asset:'写真',materialMode:'新規撮影必要',action:'投票する'},
  story3:{text:'商品の形を知る',asset:'写真',materialMode:'新規撮影必要',action:'見る'},
@@ -29,7 +29,7 @@ const ten=p=>ctx.validate({schema:ctx.SCHEMA,scope:'ten-day',plans:Array.from({l
 const single=p=>ctx.validateSingle({schema:ctx.SCHEMA,scope:ctx.SINGLE_SCOPE,plan:p},date);
 
 assert.equal(ten(plan()).length,0);
-assert.equal(single(plan()).id,'official-01');
+assert.equal(single(plan()).id,'v7-official-01');
 for(const absent of [null,undefined]){
  const optional=plan();if(absent===undefined)delete optional.themeId;else optional.themeId=absent;
  delete optional.themeCategory;
@@ -68,22 +68,22 @@ assert.ok(ten(badPoll).some(issue=>issue.level==='要修正'),'ten-day keeps who
 assert.throws(()=>single(badPoll),/アンケート/);
 const noShots=plan();delete noShots.shots;
 assert.throws(()=>ten(noShots),/撮影指示/);
-assert.equal(single(noShots).id,'official-01');
-assert.equal(single(plan()).id,'official-01');
+assert.equal(single(noShots).id,'v7-official-01');
+assert.equal(single(plan()).id,'v7-official-01');
 const concept=fs.readFileSync('three-axis.js','utf8');
 const published=fs.readFileSync('dist/index.html','utf8');
 const conceptCheck=concept.match(/^function generatedConceptError\(post\).*$/m)?.[0];
 assert.ok(conceptCheck&&published.includes(conceptCheck),'source and published concept validation match');
 assert.ok(concept.includes("sale:null")&&published.includes("sale:null"),'sale brief has no fabricated official parent');
 assert.ok(concept.includes('post.themeId=topic.id;')&&published.includes('post.themeId=topic.id;'),'generated official topic uses its official ID');
-const conceptCtx={OFFICIAL_TOPICS:ctx.OFFICIAL_TOPICS,AXES:{BUSINESS:'販売'}};
+const conceptCtx={ALL_OFFICIAL_TOPICS:ctx.ALL_OFFICIAL_TOPICS,AXES:{BUSINESS:'販売'}};
 vm.createContext(conceptCtx);vm.runInContext(conceptCheck,conceptCtx);
 assert.equal(conceptCtx.generatedConceptError({theme:'新発売案内',parentId:null,primaryAxis:'BUSINESS'}),'');
 assert.match(conceptCtx.generatedConceptError({theme:'案内',parentId:'official-999',primaryAxis:'BUSINESS'}),/親テーマID/);
 const planner=fs.readFileSync('dist/period-planner.js','utf8');
 const story1Check=planner.match(/^function story1Candidate\(post,attempt\).*$/m)?.[0];
 assert.ok(story1Check);
-const plannerCtx={OFFICIAL_TOPICS:ctx.OFFICIAL_TOPICS};vm.createContext(plannerCtx);
+const plannerCtx={V7_OFFICIAL_TOPICS:ctx.V7_OFFICIAL_TOPICS};vm.createContext(plannerCtx);
 vm.runInContext(story1Check,plannerCtx);
 assert.equal(plannerCtx.story1Candidate({parentId:null,theme:'販売ラインナップ',takeaway:'次回予定',topicGroup:null}).parentId,null);
 console.log('PASS shared Plan normalizer/validator on ten-day and single-day paths');

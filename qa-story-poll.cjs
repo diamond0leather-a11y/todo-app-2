@@ -25,7 +25,7 @@ const post={id:'post-1',skuIds:[],revision:1,stories:[
  {text:'投稿へ',skuIds:[],participatory:false}
 ]};
 let formBody='',save;
-const context={html:value=>String(value).replaceAll('&','&amp;').replaceAll('<','&lt;'),STORY_ROLES:['知る','参加・対話する','発見','投稿へ'],OFFICIAL_TOPICS:[],demo:{posts:[post]},structuredClone,
+const context={html:value=>String(value).replaceAll('&','&amp;').replaceAll('<','&lt;'),STORY_ROLES:['知る','参加・対話する','発見','投稿へ'],OFFICIAL_TOPICS:[],ALL_OFFICIAL_TOPICS:[],officialTopicOptions:()=>[],demo:{posts:[post]},structuredClone,
  sku:()=>null,skuLabel:id=>id,formInput:()=>'',formSelect:()=>'',skuPickerWork:()=>'',dx:()=>({close(){}}),openForm:(_title,body,callback)=>{formBody=body;save=callback;}};
 vm.createContext(context);
 vm.runInContext(between(html,'function storyPollRequired(s,i){','const finalStoryShow=showPost;')+between(html,'function validateStorySet(p,list){','function saveStoryDraft(id){'),context);

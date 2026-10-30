@@ -7,13 +7,13 @@ function noPostHistory(from){return planContext(from).recent.filter(p=>p.noPostC
 function exposureSummary(history){const summarize=posts=>{const result={postCount:posts.length,miniWallet:0,wallet:0,bag:0,black:0,bySku:{},byCategory:{},lastExposureDate:{}};for(const p of posts){const ids=new Set([...(p.products||[]),...(p.stories||[]).flatMap(s=>s.skuIds||[])]);let mini=false,wallet=false,bag=false,black=false;for(const id of ids){const s=sku(id),i=s&&item(s.itemId),category=demo.categories.find(c=>c.id===i?.categoryId)?.name||'未分類',label=[i?.name,s?.name,s?.color,s?.material,category].filter(Boolean).join(' ');if(!s)continue;result.bySku[id]=(result.bySku[id]||0)+1;result.byCategory[category]=(result.byCategory[category]||0)+1;if(!result.lastExposureDate[id])result.lastExposureDate[id]=p.postedAt||p.date;mini ||= /mini wallet/i.test(label);wallet ||= /wallet|財布/i.test(label);bag ||= /bag|バッグ/i.test(label);black ||= /black|noir|黒/i.test(label);}result.miniWallet+=Number(mini);result.wallet+=Number(wallet);result.bag+=Number(bag);result.black+=Number(black);}return result;};return {last10:summarize(history.slice(0,10)),last20:summarize(history.slice(0,20))};}
 function productContext(){return demo.skus.filter(s=>!s.deleted).map(s=>({id:s.id,item:item(s.itemId)?.name||'',category:demo.categories.find(c=>c.id===item(s.itemId)?.categoryId)?.name||'',name:skuLabel(s.id),color:s.color||'',material:s.material||'',status:s.status,restockDate:s.restockDate||'',priority:!!s.priority,adCandidate:!!s.adCandidate}));}
 function monthlySaleStrategy(from,to){return Object.entries(demo.months).filter(([month,m])=>(month>=from.slice(0,7)&&month<=to.slice(0,7))||(m.date&&m.date>=dayAdd(from,-31)&&m.date<=dayAdd(to,31))).map(([month,m])=>({month,saleDate:m.date,lineup:saleRestockLineup(m.date).map(l=>{const product=sku(l.skuId),theItem=item(product.itemId);return {skuId:l.skuId,name:skuLabel(l.skuId),item:theItem?.name||'',category:demo.categories.find(c=>c.id===theItem?.categoryId)?.name||'',priority:!!(l.priority||product.priority),adCandidate:!!(l.adCandidate||product.adCandidate),saleKind:l.saleKind||'未設定',status:product.status||'未設定'};}).sort((a,b)=>a.category.localeCompare(b.category,'ja')||a.item.localeCompare(b.item,'ja')||a.name.localeCompare(b.name,'ja'))}));}
-function feedbackContext(actualPostIds){const source=nextPlanFeedbackContext(),entries=[],seen=new Set(),included=actualPostIds&&new Set(actualPostIds);for(const c of source.comments){if(included&&!included.has(c.postId||c.recordId.split('|')[0]))continue;const key=['comment',c.recordId,c.text].join('|');if(seen.has(key))continue;seen.add(key);entries.push({type:'comment',date:c.observedAt||'',source:c.recordId,content:c.text,linkedPost:c.postId,stage:c.stage,captureBand:c.captureBand});}for(const v of source.savedCustomerVoices){const key=v.id||[v.date,v.originalText,v.question].join('|');if(seen.has(key))continue;seen.add(key);entries.push({type:v.voiceType||v.kind||'voice',date:v.date,source:v.source||v.sourceStory||'',content:v.originalText||v.question||'',question:v.question,answers:v.answers,options:v.options,dm:v.dm,linkedProduct:v.skuIds,linkedTheme:v.parentId,status:v.route,uses:v.uses});}return {instruction:source.instruction,entries};}
+function feedbackContext(actualPostIds){const source=nextPlanFeedbackContext(),entries=[],seen=new Set(),included=actualPostIds&&new Set(actualPostIds);for(const c of source.comments){if(included&&!included.has(c.postId||c.recordId.split('|')[0]))continue;const key=['comment',c.recordId,c.text].join('|');if(seen.has(key))continue;seen.add(key);entries.push({type:'comment',date:c.observedAt||'',source:c.recordId,content:c.text,linkedPost:c.postId,stage:c.stage,captureBand:c.captureBand});}for(const v of source.savedCustomerVoices){const key=v.id||[v.date,v.originalText,v.question].join('|');if(seen.has(key))continue;seen.add(key);entries.push({type:v.voiceType||v.kind||'voice',date:v.date,source:v.source||v.sourceStory||'',content:v.originalText||v.question||'',question:v.question,answers:v.answers,options:v.options,dm:v.dm,linkedProduct:v.skuIds,linkedTheme:v.parentId,status:v.route,uses:v.uses,nextUse:v.nextUse||''});}return {instruction:source.instruction,entries};}
 function reviewContext(actualPostIds){
  const included=new Set(actualPostIds);
  const records=Object.fromEntries(Object.entries(demo.records||{}).filter(([key,r])=>included.has(r.postId||key.split('|')[0])).map(([key,r])=>[key,{...r,commentContents:undefined}]));
  const reviews={records,analyses:demo.analyses||[],primary7d:[],provisional24h:[],reference:[],pending7d:[],evaluationHold7d:[]};
  for(const t of allTasks().filter(t=>included.has(t.p.id))){
-  const r=demo.records[t.key],state=recordState(t),hasValue=!!r&&!r.missed&&Object.keys(RESULT_METRICS).some(k=>typeof r[k]==='number');
+  const r=reviewRecordForTask(t),state=recordState(t),hasValue=!!r&&!r.missed&&Object.keys(RESULT_METRICS).some(k=>typeof r[k]==='number');
   const observed= r?.observedAt?new Date(r.observedAt+'+09:00').getTime():NaN;
   const band=Number.isFinite(observed)?captureBand(t,r):'未取得';
   const detail={key:t.key,postId:t.p.id,stage:t.stage,observedAt:r?.observedAt||null,captureBand:band,recordState:state};
@@ -30,10 +30,14 @@ function reviewContext(actualPostIds){
  reviews.instruction='actualSnapshot未確認の数値は参考事実のみ。予定テーマ・形式・商品・本文の評価根拠にしない。期間内7dは実内容確認後に主要評価、24hは暫定、早期・遅延取得は参考。';
  return reviews;
 }
-function context(scope){const period=salesCycleBlock(),from=scope==='month'?TODAY.slice(0,7)+'-01':period?.from||demo.planStart,to=scope==='month'?dayAdd(dayAdd(from,32).slice(0,7)+'-01',-1):period?.to||dayAdd(from,9),histories=postHistories(from,to,scope==='ten-day'?planContext(from).recentLimit:20);return {schema:SCHEMA,scope,period:{from,to,days:Array.from({length:dayDiff(to,from)+1},(_,i)=>({date:dayAdd(from,i),dayNumber:Number(cycleDay(dayAdd(from,i)).replace(/\D/g,'')),blocked:blocked(dayAdd(from,i))}))},officialTopics:OFFICIAL_TOPICS.map(t=>({id:t.id,number:t.number,category:t.group,theme:t.title,researchRequired:!!t.researchRequired})),actualHistory:{count:histories.actualHistory.length,posts:histories.actualHistory},plannedPosts:{count:histories.plannedPosts.length,posts:histories.plannedPosts},productExposure:exposureSummary(histories.actualHistory),products:productContext(),monthly:{months:demo.months,saleStrategy:monthlySaleStrategy(from,to),events:demo.events,ads:demo.ads||[]},customerFeedback:feedbackContext(scope==='ten-day'?histories.actualPostIds:undefined),reviews:reviewContext(histories.actualPostIds),balance:{purposes:validAxes,existing:rangePosts().reduce((a,p)=>(a[p.primaryAxis]=(a[p.primaryAxis]||0)+1,a),{})}};}
+function context(scope){const period=salesCycleBlock(),from=scope==='month'?TODAY.slice(0,7)+'-01':period?.from||demo.planStart,to=scope==='month'?dayAdd(dayAdd(from,32).slice(0,7)+'-01',-1):period?.to||dayAdd(from,9),histories=postHistories(from,to,scope==='ten-day'?planContext(from).recentLimit:20);return {schema:SCHEMA,scope,period:{from,to,days:Array.from({length:dayDiff(to,from)+1},(_,i)=>({date:dayAdd(from,i),dayNumber:Number(cycleDay(dayAdd(from,i)).replace(/\D/g,'')),blocked:blocked(dayAdd(from,i))}))},officialTopics:V7_OFFICIAL_TOPICS.map(t=>({id:t.id,number:t.number,category:t.group,theme:t.title,researchRequired:!!t.researchRequired})),legacyOfficialTopics:LEGACY_OFFICIAL_TOPICS.map(t=>({id:t.id,number:t.number,category:t.group,theme:t.title,readOnly:true})),actualHistory:{count:histories.actualHistory.length,posts:histories.actualHistory},plannedPosts:{count:histories.plannedPosts.length,posts:histories.plannedPosts},productExposure:exposureSummary(histories.actualHistory),products:productContext(),monthly:{months:demo.months,saleStrategy:monthlySaleStrategy(from,to),events:demo.events,ads:demo.ads||[]},customerFeedback:feedbackContext(scope==='ten-day'?histories.actualPostIds:undefined),reviews:reviewContext(histories.actualPostIds),balance:{purposes:validAxes,existing:rangePosts().reduce((a,p)=>(a[p.primaryAxis]=(a[p.primaryAxis]||0)+1,a),{})}};}
 const baseEditorialContext=context;
 context=function(scope){
  const data=baseEditorialContext(scope),{from,to}=data.period;
+  if(scope==='ten-day'){
+   data.storyHistory=V7StoryState.historyEntries(demo,{before:from,limitDays:10}).map(({postId,date,slot,story,status})=>({postId,storyId:story.id||null,date,slot,status,theme:story.theme||'',text:story.text||'',asset:story.asset||'',action:story.action||'',kind:story.kind||'',skuIds:story.skuIds||[]}));
+   data.storyHistoryGuidance='Story履歴は役割別の重複確認と次の企画の判断材料です。過去の文言や企画を機械的に繰り返さず、採用を強制しません。';
+  }
  const ids=new Set(data.actualHistory.posts.map(p=>p.postId));
  const relevant=a=>a.period?.from<=to&&a.period?.to>=from||[...(a.facts||[]),...(a.trends||[]),...(a.hypotheses||[]),...(a.experiments||[])].some(x=>(x.evidence||[]).some(id=>ids.has(id)||ids.has(String(id).split('|')[0])));
  data.reviews.analyses=(demo.analyses||[]).filter(relevant);
@@ -43,12 +47,12 @@ context=function(scope){
  return data;
 };
 const scopedPostingContext=context;context=function(scope){const data=scopedPostingContext(scope);data.notPostedHistory=noPostHistory(data.period.from);return data;};
-function prompt(scope){const data=context(scope);return `あなたはcian en paclamのInstagram編集者です。以下の事実だけを根拠に${scope==='month'?'1か月の上位編集計画':'10日分のFeed / Reel / Story1〜4'}を設計してください。\n\n実投稿履歴：${data.actualHistory.count}件（実投稿日時があるものだけ、日時の新しい順）。予定投稿：${data.plannedPosts.count}件（実績ではありません）。Storyも実施済みと予定を混ぜず、重複回避には実投稿・実施済みを優先してください。actualSnapshot未確認の数値は参考事実としてのみ扱い、予定テーマ・形式・商品・本文の評価根拠に使わないでください。期間内7dは実内容確認後に主要評価、24hは暫定、早期・遅延取得は参考です。\n\n1日ずつ作らず、最初に期間全体を仮作成し、完成後に全日を読み返してください。人が毎日見て「また同じ」と感じる問い・結論・見せ方・CTA・Story構成は差し替えてください。商品を毎日出す必要はありません。同商品・同色・mini wallet・財布・黒の偏りを確認してください。100テーマを番号順に使わないでください。顧客の声は判断材料であり強制採用しません。販売と関係ない毎日見る理由も入れてください。CTAなしも認めます。投稿不可日はplansへ含めず、投稿可能日はすべてplansに含めてください。Carouselは禁止し、Feed / Reelだけを使ってください。\n\nStory1：革を知る・役立つ知識・楽しさ。Story2：参加・対話。Story3：商品・革・ものづくりの発見であり、単なる商品紹介欄ではありません。Story4：今日のメイン投稿への自然な導線で、投稿タイトルの言い換えにしないでください。正式テーマ66〜80（INDUSTRY）は要リサーチ。出典を確認できない事実を断定しないでください。BUSINESS目的の日も販売だけに寄せず、必ず具体的なcustomerValueを持たせてください。\n\n返答は説明文を付けずJSONだけにしてください。形式：${scope==='month'?'{"schema":"'+SCHEMA+'","scope":"month","plans":[{"date":"YYYY-MM-DD","themeId":"official-01","primaryPurpose":"CUSTOMER_VALUE","customerValue":"...","format":"Feed","products":[],"mainTopic":"...","angle":"..."}]}':'{"schema":"'+SCHEMA+'","scope":"ten-day","plans":[{"date":"YYYY-MM-DD","dayNumber":'+data.period.days.find(d=>!d.blocked).dayNumber+',"format":"Feed","primaryPurpose":"CUSTOMER_VALUE","customerValue":"...","themeId":"official-01","themeCategory":"LEATHER","mainTopic":"...","angle":"...","products":[],"mainPostBody":"...","shots":[{"media":"写真","what":"何をどう撮り何を伝えるか","count":1,"skuIds":[]}],"story1":{"text":"...","action":"...","asset":"具体的な撮影素材","materialMode":"新規撮影必要","skuIds":[]},"story2":{"text":"...","action":"...","kind":"質問箱","asset":"具体的な撮影素材","materialMode":"新規撮影必要","skuIds":[]},"story3":{"text":"...","action":"...","asset":"具体的な撮影素材","materialMode":"新規撮影必要","skuIds":[]},"story4":{"text":"...","action":"...","asset":"具体的な撮影素材","materialMode":"新規撮影必要","skuIds":[]},"CTA":""}]}'}\n\n編集コンテキスト：\n${JSON.stringify(data,null,2)}`;}
+function prompt(scope){const data=context(scope);return `あなたはcian en paclamのInstagram編集者です。以下の事実だけを根拠に${scope==='month'?'1か月の上位編集計画':'10日分のFeed / Reel / Story1〜4'}を設計してください。\n\n実投稿履歴：${data.actualHistory.count}件（実投稿日時があるものだけ、日時の新しい順）。予定投稿：${data.plannedPosts.count}件（実績ではありません）。Storyも実施済みと予定を混ぜず、重複回避には実投稿・実施済みを優先してください。actualSnapshot未確認の数値は参考事実としてのみ扱い、予定テーマ・形式・商品・本文の評価根拠に使わないでください。期間内7dは実内容確認後に主要評価、24hは暫定、早期・遅延取得は参考です。\n\n1日ずつ作らず、最初に期間全体を仮作成し、完成後に全日を読み返してください。人が毎日見て「また同じ」と感じる問い・結論・見せ方・CTA・Story構成は差し替えてください。商品を毎日出す必要はありません。同商品・同色・mini wallet・財布・黒の偏りを確認してください。100テーマを番号順に使わないでください。legacyOfficialTopicsと旧official-* IDは過去の意味を読むためだけに使い、新しい案のthemeIdはofficialTopics内のv7-official-* IDかnullにしてください。顧客の声は判断材料であり強制採用しません。販売と関係ない毎日見る理由も入れてください。CTAなしも認めます。投稿不可日はplansへ含めず、投稿可能日はすべてplansに含めてください。Carouselは禁止し、Feed / Reelだけを使ってください。\n\nStory1：革を知る・役立つ知識・楽しさ。Story2：参加・対話。Story3：商品・革・ものづくりの発見であり、単なる商品紹介欄ではありません。Story4：今日のメイン投稿への自然な導線で、投稿タイトルの言い換えにしないでください。最新情報や断定的な事実は出典を確認してください。出典を確認できない事実を断定しないでください。BUSINESS目的の日も販売だけに寄せず、必ず具体的なcustomerValueを持たせてください。\n\n返答は説明文を付けずJSONだけにしてください。形式：${scope==='month'?'{"schema":"'+SCHEMA+'","scope":"month","plans":[{"date":"YYYY-MM-DD","themeId":"v7-official-01","primaryPurpose":"CUSTOMER_VALUE","customerValue":"...","format":"Feed","products":[],"mainTopic":"...","angle":"..."}]}':'{"schema":"'+SCHEMA+'","scope":"ten-day","plans":[{"date":"YYYY-MM-DD","dayNumber":'+data.period.days.find(d=>!d.blocked).dayNumber+',"format":"Feed","primaryPurpose":"CUSTOMER_VALUE","customerValue":"...","themeId":"v7-official-01","themeCategory":"革を知る","mainTopic":"...","angle":"...","products":[],"mainPostBody":"...","shots":[{"media":"写真","what":"何をどう撮り何を伝えるか","count":1,"skuIds":[]}],"story1":{"text":"...","action":"...","asset":"具体的な撮影素材","materialMode":"新規撮影必要","skuIds":[]},"story2":{"text":"...","action":"...","kind":"質問箱","asset":"具体的な撮影素材","materialMode":"新規撮影必要","skuIds":[]},"story3":{"text":"...","action":"...","asset":"具体的な撮影素材","materialMode":"新規撮影必要","skuIds":[]},"story4":{"text":"...","action":"...","asset":"具体的な撮影素材","materialMode":"新規撮影必要","skuIds":[]},"CTA":""}]}'}\n\n編集コンテキスト：\n${JSON.stringify(data,null,2)}`;}
 function normalizeJsonQuotes(text){let inside=false,quote='',escaped=false,result='';for(let i=0;i<text.length;i++){const ch=text[i],next=text.slice(i+1);if(!inside){if(ch==='"'||'“”＂‘’'.includes(ch)){inside=true;quote=ch;result+='"';}else result+=ch;continue;}if(escaped){result+=ch;escaped=false;continue;}if(ch==='\\'){result+=ch;escaped=true;continue;}const closing=quote==='"'?ch==='"':quote==='‘'?ch==='’'||ch==='‘':quote==='“'?ch==='”'||ch==='“':'“”＂'.includes(ch);if(closing&&/^\s*(?:[:,}\]]|$)/.test(next)){inside=false;result+='"';}else result+=ch;}return result;}
 function jsonObjects(text){const objects=[];for(let start=0;start<text.length;start++){if(text[start]!=='{')continue;let depth=0,inside=false,quote='',escaped=false;for(let i=start;i<text.length;i++){const ch=text[i],next=text.slice(i+1);if(inside){if(escaped){escaped=false;continue;}if(ch==='\\'){escaped=true;continue;}const closing=quote==='"'?ch==='"':quote==='‘'?ch==='’'||ch==='‘':quote==='“'?ch==='”'||ch==='“':'“”＂'.includes(ch);if(closing&&/^\s*(?:[:,}\]]|$)/.test(next))inside=false;continue;}if(ch==='"'||'“”＂‘’'.includes(ch)){inside=true;quote=ch;continue;}if(ch==='{')depth++;else if(ch==='}'&&--depth===0){objects.push(text.slice(start,i+1));break;}}}return objects;}
 function extract(raw){const text=String(raw||'').trim();try{return JSON.parse(text)}catch{}const candidates=[text];for(const match of text.matchAll(/```(?:json)?\s*([\s\S]*?)```/gi))candidates.push(match[1].trim());const parsed=[];for(const candidate of [...candidates,...candidates.flatMap(jsonObjects)]){try{parsed.push(JSON.parse(candidate));continue;}catch{}if(/[“”＂‘’]/.test(candidate))try{parsed.push(JSON.parse(normalizeJsonQuotes(candidate)))}catch{}}const result=parsed.find(value=>value?.schema===SCHEMA)||parsed[0];if(result)return result;throw Error('ChatGPTの返答からJSON部分を読み取れませんでした。JSON部分のみ貼り付けてください。');}
 function extractSingle(raw){return extract(raw);}
-function warnings(plans){const result=[],dates=rows=>rows.map(p=>short(p.date)).join('、');for(const axis of validAxes){const count=plans.filter(p=>p.primaryPurpose===axis).length;if(count)result.push({level:'情報',text:`主目的 ${axis}：${count}件（固定比率なし）`});}const noCta=plans.filter(p=>!p.CTA);if(noCta.length)result.push({level:'情報',text:`CTAなし：${noCta.length}件（CTAは任意、対象日：${dates(noCta)}）`});return result;}
+function warnings(plans){const result=[],dates=rows=>rows.map(p=>short(p.date)).join('、');for(const axis of validAxes){const count=plans.filter(p=>p.format!=='投稿なし'&&p.primaryPurpose===axis).length;if(count)result.push({level:'情報',text:`主目的 ${axis}：${count}件（固定比率なし）`});}const noCta=plans.filter(p=>p.format!=='投稿なし'&&!p.CTA);if(noCta.length)result.push({level:'情報',text:`CTAなし：${noCta.length}件（CTAは任意、対象日：${dates(noCta)}）`});return result;}
 function contentText(story){return [story?.text,story?.action,story?.theme,story?.what].filter(Boolean).join(' ');}
 function normalizedContent(value){return String(value||'').normalize('NFKC').toLowerCase().replace(/この紙|裁断用の紙|型紙/g,'型紙').replace(/リール/g,'reel').replace(/[\s。、，．!！?？「」『』（）()・：:―ー〜～]/g,'');}
 function contentSimilarity(left,right){const a=normalizedContent(left),b=normalizedContent(right);if(!a||!b)return 0;if(a===b)return 1;if(Math.min(a.length,b.length)>=14&&(a.includes(b)||b.includes(a)))return .9;const grams=text=>{const result=new Set();for(let i=0;i<text.length-2;i++)result.add(text.slice(i,i+3));return result;},x=grams(a),y=grams(b);return x.size&&y.size?2*[...x].filter(part=>y.has(part)).length/(x.size+y.size):0;}
@@ -58,6 +62,7 @@ function answerable(text){return /[?？]|教えて|選んで|投票|答えて|�
 function story2Kind(story){const kind=String(story?.kind||story?.stickerType||'');return /クイズ/.test(kind)?'クイズ':/アンケート|二択/.test(kind)?'アンケート':/質問箱|質問スタンプ|質問/.test(kind)?'質問箱':/返答/.test(kind)?'返答':kind||'未設定';}
 function story2Issue(story){const kind=story2Kind(story),text=String(story?.text||''),action=String(story?.action||'').trim(),options=story?.options;
  if(kind==='返答')return text.trim()&&action?'':'Story2の返答には本文と次の行動が必要です。';
+ if(kind==='会話'||kind==='なし')return text.trim()&&action?'':'Story2の会話案には本文と次の行動が必要です。';
  if(/クイズ/.test(text)&&kind!=='クイズ')return 'Story2の本文はクイズですが、参加形式がクイズではありません。';
  if(kind==='クイズ'&&(!answerable(text)||!action||!Array.isArray(options)||options.length<2||options.some(option=>!String(option).trim())||!String(story.correctAnswer||'').trim()||!/同じStory|Story2|正解|答え/.test(String(story.answerLocation||action))||/Story4/.test(String(story.answerLocation||action))))return 'Story2のクイズは質問・選択肢・正解・同枠内の回答場所を揃えてください。';
  if(kind!=='クイズ'&&/アンケート|二択|どちら|どっち|選んで/.test(text+' '+action+' '+kind)&&kind!=='アンケート')return 'Story2の二択は参加形式をアンケート／二択にしてください。';
@@ -76,12 +81,12 @@ function storyQuality(plans){const issues=[],add=(date,message)=>issues.push({le
   if(contentSimilarity(texts[0],texts[2])>.67)add(plan.date,'Story1とStory3が同じ学び・被写体です。');
   if(contentSimilarity(texts[2],texts[3])>.58||(/答え|正解/.test(texts[3])&&(/[?？]|クイズ|当て/.test(texts[2])||sharedMotifs(texts[2],texts[3]).length)))add(plan.date,'Story3とStory4が同じ企画の続き・答え合わせです。Story4はメイン投稿への独立した導線にしてください。');
   for(let a=0;a<4;a++)for(let b=a+1;b<4;b++)if((a!==0||b!==2)&&(a!==2||b!==3)&&contentSimilarity(texts[a],texts[b])>.72)add(plan.date,`Story${a+1}とStory${b+1}の問い・結論・行動が近すぎます。`);
-  if(!/投稿|reel|feed|リール|動画|本文|メイン/i.test(texts[3])||normalizedContent(texts[3]).length<18||/^(今日の)?投稿を見て(ください|ね)?[。!！]*$/.test(String(stories[3]?.text||'').trim()))add(plan.date,'Story4にメイン投稿で確かめられる具体的な理由がありません。');
+  if(normalizedContent(texts[3]).length<18||plan.format!=='投稿なし'&&(!/投稿|reel|feed|リール|動画|本文|メイン/i.test(texts[3])||/^(今日の)?投稿を見て(ください|ね)?[。!！]*$/.test(String(stories[3]?.text||'').trim())))add(plan.date,plan.format==='投稿なし'?'Story4に次の行動を選ぶ具体的な理由がありません。':'Story4にメイン投稿で確かめられる具体的な理由がありません。');
  }
  for(let i=0;i<plans.length;i++)for(let j=i+1;j<plans.length;j++){const a=plans[i],b=plans[j],a2=contentText(a.story2),b2=contentText(b.story2);
   if(contentSimilarity(a2,b2)>.64)issues.push({level:'要修正',text:`${short(a.date)}と${short(b.date)}：Story2の質問・企画が重複しています。`});
   for(const slot of [1,3,4]){const left=contentText(a['story'+slot]),right=contentText(b['story'+slot]);if(contentSimilarity(left,right)>.72||(sharedMotifs(left,right).length>=2&&contentSimilarity(left,right)>.42))issues.push({level:'要修正',text:`${short(a.date)}と${short(b.date)}：Story${slot}の学び・被写体が近すぎます。`});}
-  if(contentSimilarity([a.mainTopic,a.angle,a.customerValue].join(' '),[b.mainTopic,b.angle,b.customerValue].join(' '))>.68||contentSimilarity(a.mainPostBody,b.mainPostBody)>.78)issues.push({level:'要修正',text:`${short(a.date)}と${short(b.date)}：メイン投稿の企画・顧客価値が近すぎます。`});
+  if(a.format!=='投稿なし'&&b.format!=='投稿なし'&&(contentSimilarity([a.mainTopic,a.angle,a.customerValue].join(' '),[b.mainTopic,b.angle,b.customerValue].join(' '))>.68||contentSimilarity(a.mainPostBody,b.mainPostBody)>.78))issues.push({level:'要修正',text:`${short(a.date)}と${short(b.date)}：メイン投稿の企画・顧客価値が近すぎます。`});
  }
  const ctas={};for(const plan of plans){const key=normalizedContent(plan.CTA);if(key)(ctas[key]||=[]).push(plan.date);}for(const dates of Object.values(ctas))if(dates.length>=3)issues.push({level:'要修正',text:`同じCTAが${dates.length}日あります（${dates.map(short).join('、')}）。`});
  return issues;
@@ -96,12 +101,12 @@ function exposureAudit(plans){const products=productContext(),dates=plans.map(pl
  check(counts.sku,'SKU',activeProducts.length);check(counts.item,'アイテム',new Set(activeProducts.map(row=>row.item)).size);check(counts.category,'商品カテゴリ',new Set(activeProducts.map(row=>row.category)).size);check(counts.color,'色',new Set(activeProducts.map(row=>row.color).filter(Boolean)).size);
  for(const [id,count] of Object.entries(counts.sku))if(count>=3&&(recent.last10.bySku[id]||0)>=4&&activeProducts.length>1)issues.push({level:'商品露出要確認',text:`${skuLabel(id)}は直近10実投稿で${recent.last10.bySku[id]}回、今回も${count}日です。priority・広告候補でも、露出理由と代替候補を確認してください。`});
  for(const [label,count] of [['mini wallet',counts.miniWallet],['財布',counts.wallet],['黒系',counts.black]])if(count>=limit&&activeProducts.some(row=>!/mini wallet|wallet|財布|black|noir|黒/i.test([row.item,row.category,row.name,row.color].join(' '))))issues.push({level:'商品露出要確認',text:`${label}が${count}/${days}日です。別カテゴリの商品や商品なしの日も検討してください。`});
- const sets=new Map();for(const plan of plans){const ids=[...new Set([...(plan.products||[]),...[1,2,3,4].flatMap(n=>plan['story'+n]?.skuIds||[])])].sort();if(ids.length<2)continue;const key=ids.join('|');if(!sets.has(key))sets.set(key,[]);sets.get(key).push(plan);}for(const repeated of sets.values())if(repeated.length>1)issues.push({level:'商品露出要確認',text:`${repeated.map(plan=>short(plan.date)).join('・')}で同じ${repeated[0].products.length||'複数'}商品セットを再利用しています。各日でこの組み合わせが必要な別の企画理由を確認してください。`});
+ const sets=new Map();for(const plan of plans){const ids=[...new Set([...(plan.products||[]),...[1,2,3,4].flatMap(n=>plan['story'+n]?.skuIds||[])])].sort();if(ids.length<2)continue;const key=ids.join('|');if(!sets.has(key))sets.set(key,[]);sets.get(key).push(plan);}for(const repeated of sets.values())if(repeated.length>1)issues.push({level:'商品露出要確認',text:`${repeated.map(plan=>short(plan.date)).join('・')}で同じ${repeated[0].products?.length||'複数'}商品セットを再利用しています。各日でこの組み合わせが必要な別の企画理由を確認してください。`});
  const summary=[...Object.entries(counts.sku).sort((a,b)=>b[1]-a[1]).map(([id,count])=>{const row=products.find(product=>product.id===id),upcoming=sale.filter(month=>month.saleDate>=dates[0]).sort((a,b)=>a.saleDate.localeCompare(b.saleDate)),lineup=[...upcoming,...sale].flatMap(month=>month.lineup).find(entry=>entry.skuId===id),status={selling:'販売中',soldout:'SOLD OUT',restock:'再販予定'}[row?.status]||row?.status||'状態不明';return `${skuLabel(id)}：${count}日（月間販売予定：${lineup?.saleKind||'対象外'} / 現在：${status} / 直近10投稿${recent.last10.bySku[id]||0}回 / 20投稿${recent.last20.bySku[id]||0}回 / 優先商品：${lineup?.priority||row?.priority?'はい':'いいえ'} / 広告候補：${lineup?.adCandidate||row?.adCandidate?'はい':'いいえ'}）`;}),`mini wallet：${counts.miniWallet}日`,`財布：${counts.wallet}日`,`黒系：${counts.black}日`,...Object.entries(counts.category).map(([name,count])=>`${name}カテゴリ：${count}日`)];
  return {issues,summary,context:{monthlySale:sale,recent10:recent.last10,recent20:recent.last20,priority:products.filter(row=>row.priority).map(row=>row.id),adCandidates:products.filter(row=>row.adCandidate).map(row=>row.id)}};
 }
 function editorialSections(text){const sentences=String(text||'').split(/(?<=[。！？?])/).map(part=>part.trim()).filter(Boolean);return {question:sentences.find(part=>/[？?]/.test(part))||'',conclusion:sentences.at(-1)||'',body:String(text||'')};}
-function themeAudit(plans){const issues=[],ordered=plans.slice().sort((a,b)=>a.date.localeCompare(b.date)),topics=ordered.map(plan=>OFFICIAL_TOPICS.find(topic=>topic.id===plan.themeId)),counts={};
+function themeAudit(plans){const issues=[],ordered=plans.slice().sort((a,b)=>a.date.localeCompare(b.date)),topics=ordered.map(plan=>V7_OFFICIAL_TOPICS.find(topic=>topic.id===plan.themeId)),counts={};
  for(const topic of topics)if(topic)(counts[topic.id]=(counts[topic.id]||0)+1);
  for(const [id,count] of Object.entries(counts))if(count>=3)issues.push({level:'注意',text:`正式テーマ ${id} が${count}日あります。切り口と顧客価値の違いを確認してください。`});
  let sequence=1;for(let i=1;i<topics.length;i++){sequence=topics[i]&&topics[i-1]&&topics[i].number===topics[i-1].number+1?sequence+1:1;if(sequence>=5){issues.push({level:'要修正',text:`${short(ordered[i-sequence+1].date)}〜${short(ordered[i].date)}で正式テーマ番号を連続消費しています。企画に合わせて選び直してください。`});break;}}
@@ -113,8 +118,8 @@ function themeAudit(plans){const issues=[],ordered=plans.slice().sort((a,b)=>a.d
  return issues;
 }
 function researchSourceText(source){return typeof source==='string'?source:source&&typeof source==='object'?[source.title,source.url,source.publisher].filter(Boolean).join(' / '):'';}
-function researchAudit(plans){return plans.flatMap(plan=>{const topic=OFFICIAL_TOPICS.find(entry=>entry.id===plan.themeId);if(!topic||topic.number<66||topic.number>80)return [];return Array.isArray(plan.researchSources)&&plan.researchSources.some(source=>researchSourceText(source).trim().length>=10)?[{level:'注意',text:`${short(plan.date)}：INDUSTRYの出典をプレビューで人が確認してください。`}]:[{level:'要修正',text:`${short(plan.date)}：INDUSTRYは出典未確認です。researchSourcesに確認可能な出典を記載してください。`}];});}
-function qualityAudit(plans){const exposure=exposureAudit(plans);return {issues:[...storyQuality(plans),...themeAudit(plans),...researchAudit(plans),...exposure.issues],exposure};}
+function researchAudit(plans){return plans.flatMap(plan=>{const topic=V7_OFFICIAL_TOPICS.find(entry=>entry.id===plan.themeId);if(!topic?.researchRequired)return [];return Array.isArray(plan.researchSources)&&plan.researchSources.some(source=>researchSourceText(source).trim().length>=10)?[{level:'注意',text:`${short(plan.date)}：該当テーマの出典をプレビューで人が確認してください。`}]:[{level:'要修正',text:`${short(plan.date)}：該当テーマは出典未確認です。researchSourcesに確認可能な出典を記載してください。`}];});}
+function qualityAudit(plans){const exposure=exposureAudit(plans),posts=plans.filter(plan=>plan.format!=='投稿なし');return {issues:[...storyQuality(plans),...themeAudit(posts),...researchAudit(posts),...exposure.issues],exposure};}
 function importPeriod(data){
  const block=salesCycleBlock();
  if(!block||!Array.isArray(data?.plans)||!data.plans.length)throw Error('対象期間の投稿案がありません。');
@@ -124,11 +129,30 @@ function importPeriod(data){
  return target;
 }
 function importProtection(post,choice){
- if(!post)return {whole:false,meta:false,caption:false,stories:[]};
- if(post.actualAt||post.actualSnapshot||post.noPostConfirmedAt||post.deleted||post.posted||post.status==='posted'||post.edited)return {whole:true,meta:true,caption:true,stories:[true,true,true,true]};
+ if(!post)return {whole:false,meta:false,caption:false,cta:false,products:false,shots:false,stories:[]};
+ if(post.actualAt||post.actualSnapshot||post.noPostConfirmedAt||post.deleted||post.posted||post.status==='posted'||post.edited)return {whole:true,meta:true,caption:true,cta:true,products:true,shots:true,stories:[true,true,true,true]};
+ if(choice?.v7Selection)return {whole:false,meta:!choice.meta,caption:!choice.caption,cta:!choice.cta,products:!choice.products,shots:!choice.shots,stories:[1,2,3,4].map(slot=>!choice.stories.includes(slot))};
  const fields=post.manualFields;
- if((post.manual&&!fields)||(fields&&fields.revision!==post.revision))return choice?{whole:choice.meta&&choice.caption&&choice.stories.every(Boolean),meta:choice.meta,caption:choice.caption,stories:choice.stories}:{whole:true,meta:true,caption:true,stories:[true,true,true,true]};
- return {whole:false,meta:false,caption:!!fields?.caption,stories:[0,1,2,3].map(i=>!!(post.stories?.[i]?.manual||fields?.stories?.[i]))};
+ if((post.manual&&!fields)||fields?.unknown||(fields&&fields.revision!==post.revision))return choice&&!fields?.unknown?{whole:choice.meta&&choice.caption&&choice.stories.every(Boolean),meta:choice.meta,caption:choice.caption,cta:choice.meta,products:choice.meta,shots:choice.meta,stories:choice.stories}:{whole:true,meta:true,caption:true,cta:true,products:true,shots:true,stories:[true,true,true,true]};
+ return {whole:false,meta:!!fields?.meta,caption:!!fields?.caption,cta:!!fields?.cta,products:!!fields?.products,shots:!!fields?.shots||!!post.shots?.some(shot=>typeof shotDoneFor==='function'?shotDoneFor(shot):demo.shotDone?.[shot.signature]),stories:[0,1,2,3].map(i=>!!(post.stories?.[i]?.manual||fields?.stories?.[i]||demo.reactions.some(reaction=>reaction.sourceStory?.storyId&&reaction.sourceStory.storyId===post.stories?.[i]?.id)))};
+}
+function editorialPostForDate(posts,date){return posts.find(post=>!post.deleted&&post.date===date)||posts.find(post=>!post.deleted&&post.manualFields?.scheduleDates?.includes(date));}
+function editorialAdoptShots(oldShots,proposedShots,sameIndexes=[]){
+ const keep=new Set(sameIndexes.map(Number));
+ const shots=proposedShots.map((shot,index)=>{
+  const old=oldShots[index],explicitId=shot.id||null;
+  if(keep.has(index)&&(!old?.id||old.media!==shot.media||explicitId&&explicitId!==old.id))throw Error(`${index+1}カット目は同じ撮影カットとして扱えません。別カットを選ぶか、現在の指示を維持してください。`);
+  const unchanged=old&&old.media===shot.media&&old.what===shot.what&&JSON.stringify(old.skuIds||[])===JSON.stringify(shot.skuIds||[]);
+  const same=!!old&&(explicitId?explicitId===old.id&&old.media===shot.media:unchanged||keep.has(index));
+  if(same&&!old.id&&typeof shotDoneFor==='function'&&shotDoneFor(old)&&!unchanged)throw Error(`${index+1}カット目の旧撮影記録は安全に識別できません。現在の指示を維持するか、別カットとして採用してください。`);
+  const id=same?(old.id||newId()):newId();
+  return {...shot,id,signature:same&&unchanged?old.signature:[shot.media,shot.what,...(shot.skuIds||[]).slice().sort()].join('|')};
+ });
+ if(new Set(shots.map(shot=>shot.id)).size!==shots.length)throw Error('撮影IDが重複しています。');
+ return shots;
+}
+function editorialRetainShotDone(oldShots,newShots,done){
+ oldShots.forEach((old,index)=>{const next=newShots[index],key=old?.id&&`shot-id|${old.id}`;if(key&&next?.id===old.id&&!Object.hasOwn(done,key)&&done[old.signature])done[key]=true;});
 }
 function validateEditorialShots(shots,date){
  if(!Array.isArray(shots)||!shots.length||shots.length>30||shots.some(shot=>!['写真','動画'].includes(shot?.media)||typeof shot.what!=='string'||!shot.what.trim()||!Number.isSafeInteger(shot.count)||shot.count<1||shot.count>20||!Array.isArray(shot.skuIds)||shot.skuIds.some(id=>!sku(id)||sku(id).deleted)))throw Error(`${date}のメイン投稿の撮影指示を確認してください。`);
@@ -140,8 +164,13 @@ function normalizeEditorialPlan(plan){
   ...(Object.hasOwn(plan,'shots')?{shots:Array.isArray(plan.shots)?plan.shots.map(shot=>shot&&typeof shot==='object'&&!Array.isArray(shot)?{...shot,what:trim(shot.what),skuIds:Array.isArray(shot.skuIds)?[...shot.skuIds]:shot.skuIds}:shot):plan.shots}:{})};
 }
 function validateEditorialPlan(plan,{scope}){
- const p=normalizeEditorialPlan(plan),topic=OFFICIAL_TOPICS.find(t=>t.id===p.themeId),tenDay=scope==='ten-day';
+ const p=normalizeEditorialPlan(plan),topic=V7_OFFICIAL_TOPICS.find(t=>t.id===p.themeId),tenDay=scope==='ten-day';
  if(!/^\d{4}-\d{2}-\d{2}$/.test(p.date||''))throw Error('投稿の日付を確認してください。');
+ if(tenDay&&p.format==='投稿なし'){
+  if(![p.story1,p.story2,p.story3,p.story4].every(story=>typeof story?.text==='string'&&story.text.trim()))throw Error(`${p.date}のStory1〜4を確認してください。`);
+  if([1,2,3,4].some(n=>p['story'+n].skuIds!==undefined&&(!Array.isArray(p['story'+n].skuIds)||p['story'+n].skuIds.some(id=>!sku(id)||sku(id).deleted))))throw Error(`${p.date}のStoryの商品IDを確認してください。`);
+  return {plan:p,topic:null,story2Issue:story2Issue(p.story2)};
+ }
  if((p.themeId!=null&&!topic)||!validAxes.includes(p.primaryPurpose)||!['Feed','Reel'].includes(p.format))throw Error(tenDay?`${p.date}のテーマ・主目的・形式を確認してください。`:'正式テーマ・主目的・形式を確認してください。');
  if(topic&&p.themeCategory&&p.themeCategory!==topic.group)throw Error(tenDay?`${p.date}のテーマ分類が正式100テーマと一致しません。`:'正式テーマのカテゴリがthemeIdと一致しません。');
  if(typeof p.mainTopic!=='string'||!p.mainTopic||typeof p.mainPostBody!=='string'||!p.mainPostBody||typeof p.customerValue!=='string'||!p.customerValue||![p.story1,p.story2,p.story3,p.story4].every(s=>typeof s?.text==='string'&&s.text))throw Error(tenDay?`${p.date}のテーマ・本文・customerValue・Story1〜4を確認してください。`:'テーマ・顧客価値・本文・Story1〜4が不足しています。');
@@ -158,15 +187,15 @@ function validate(data){
  for(const p of data.plans){
   if(!p||!/^\d{4}-\d{2}-\d{2}$/.test(p.date||'')||p.date<period.from||p.date>period.to)throw Error(`${p?.date||'日付未設定'}は選択された期間の対象外です。`);
   if(seen.has(p.date))throw Error(`${short(p.date)}の日付が重複しています。`);
-  if(blocked(p.date))throw Error(`${short(p.date)}は投稿不可日のためplansに含められません。`);
-  const expectedDay=period.dayFrom+dayDiff(p.date,period.from);
+  if(blocked(p.date)&&p.format!=='投稿なし')throw Error(`${short(p.date)}は投稿不可日です。Storyだけの案は「投稿なし」にしてください。`);
+  const expectedDay=(period.dayFrom??1)+dayDiff(p.date,period.from);
   if(p.dayNumber!==expectedDay)throw Error(`${short(p.date)}のDayは${expectedDay}にしてください。`);
   seen.add(p.date);
   validateEditorialPlan(p,{scope:'ten-day'});
-  if([...p.mainPostBody].length<300)throw Error(`${short(p.date)}の本文は300文字以上にしてください。`);
+  if(p.format!=='投稿なし'&&[...p.mainPostBody].length<300)throw Error(`${short(p.date)}の本文は300文字以上にしてください。`);
   for(const [index,story] of [p.story1,p.story2,p.story3,p.story4].entries()){const label=`${p.date}のStory${index+1}`;if(typeof story.asset!=='string'||!story.asset.trim())throw Error(`${label}のassetを確認してください。`);if(!['過去素材使用可','新規撮影必要','まとめ撮り対象'].includes(story.materialMode))throw Error(`${label}のmaterialModeを確認してください。許容値：過去素材使用可／新規撮影必要／まとめ撮り対象。`);if(typeof story.action!=='string'||!story.action.trim())throw Error(`${label}のactionを確認してください。`);}
  }
- for(let date=period.from;date<=period.to;date=dayAdd(date,1))if(!blocked(date)&&!seen.has(date))throw Error(`${short(date)}の企画がありません。`);
+ for(let date=period.from;date<=period.to;date=dayAdd(date,1))if(!seen.has(date))throw Error(`${short(date)}のStory案がありません。`);
  return [...warnings(data.plans),...qualityAudit(data.plans).issues];
 }
 function openImport(targetPostId){if(previewSaving)return;openForm('ChatGPT JSONを取り込む','<p>ChatGPTのJSON返答を貼り付けてください。scopeに応じて内容をプレビューします。</p><label class="wlabel">JSON<textarea name="json" rows="12" required></textarea></label>',f=>{routeEditorialImport(extract(f.get('json')),targetPostId);return false;});}
@@ -176,42 +205,57 @@ function routeEditorialImport(data,targetPostId){
   const target=targetPostId?demo.posts.find(post=>post.id===targetPostId&&!post.deleted):null;
   validateSingle(data,target?.date||data.plan?.date);
   const matches=target?[target]:demo.posts.filter(post=>post.date===data.plan?.date&&!post.deleted);
+  if(matches.length===0&&V7StoryState.entriesOnDate(demo,data.plan.date).length){showStandaloneStoryProposal(data.plan);return;}
   if(matches.length!==1)throw Error('単日再提案の対象投稿を1件に特定できません。plan.dateを確認してください。');
   const post=matches[0];
   singlePreview={postId:post.id,before:savedPlan(post),after:data.plan,revision:post.revision};
-  showSinglePreview();
+  showSingleOptInPreview();
   return;
  }
- const warn=validate(data),revisions=Object.fromEntries(data.plans.map(plan=>{const post=demo.posts.find(p=>p.date===plan.date&&!p.deleted);return [plan.date,post?{id:post.id,revision:post.revision}:null];})),legacyChoices={};
+ const warn=validate(data),revisions=Object.fromEntries(data.plans.map(plan=>{const post=editorialPostForDate(demo.posts,plan.date);return [plan.date,post?{id:post.id,revision:post.revision}:null];})),legacyChoices={};
  for(const plan of data.plans){const post=demo.posts.find(p=>p.date===plan.date&&!p.deleted);if(post?.manual&&!post.manualFields&&!post.actualAt&&!post.actualSnapshot)legacyChoices[plan.date]={meta:true,caption:true,stories:[true,true,true,true]};}
- preview={data,warn,period:importPeriod(data),revisions,legacyChoices,researchConfirmed:false};
+ const approvals=Object.fromEntries(data.plans.map(plan=>[plan.date,{v7Selection:true,createPost:false,meta:false,caption:false,cta:false,products:false,shots:false,sameShots:[],stories:[]}]));
+ const storySnapshot=Object.fromEntries(data.plans.map(plan=>[plan.date,[1,2,3,4].map(slot=>V7StoryState.entriesOnDate(demo,plan.date).filter(entry=>entry.slot===slot).map(entry=>JSON.stringify(entry.story)))]));
+ preview={data,warn,period:importPeriod(data),revisions,storySnapshot,legacyChoices,approvals,researchConfirmed:false};
  showPreview();
 }
-function showPreview(){const d=preview.data,group=level=>preview.warn.filter(w=>w.level===level);openForm('10日全体プレビュー',`<p class="tiny muted">投稿可能な${d.plans.length}日分を確認してから確定してください。確定後は編集済み・投稿済みの内容を維持します。</p>`+(['要確認','情報'].map(level=>group(level).length?`<details class="card" ${level==='要確認'?'open':''}><summary>${level} · ${group(level).length}件</summary>${group(level).map(w=>`<p class="tiny">${html(w.text)}</p>`).join('')}</details>`:'').join(''))+d.plans.map(p=>{const topic=OFFICIAL_TOPICS.find(t=>t.id===p.themeId);return `<details class="card editorial-day-preview"><summary>Day${html(Number(cycleDay(p.date).replace(/\D/g,'')))}｜${html(short(p.date))} · ${html(p.format)}${topic?' · '+html(topic.group)+' #'+html(topic.number):''}</summary><p class="tiny muted">正式テーマ：${html(topic?.title||'指定なし（mainTopicを使用）')}</p><h3>${html(p.mainTopic)}</h3><p><strong>主目的：</strong>${html(p.primaryPurpose)}</p><p><strong>お客様に届ける価値：</strong>${html(p.customerValue)}</p><p><strong>使用商品：</strong>${html((p.products||[]).map(skuLabel).join(' / ')||'商品なし')}</p><p><strong>メイン本文</strong><br>${html(p.mainPostBody)}</p>${[1,2,3,4].map(n=>`<p><strong>Story ${n}</strong><br>${html(p['story'+n].text)}${n===2&&/アンケート|二択/.test(String(p.story2.kind||''))?`<br>アンケート<br>選択肢①：${html(p.story2.options?.[0]||'未設定')}<br>選択肢②：${html(p.story2.options?.[1]||'未設定')}`:''}</p>`).join('')}<p><strong>CTA：</strong>${html(p.CTA||'CTAなし')}</p></details>`;}).join('')+'<p class="tiny muted">以下の「保存する」で確定します。内容と保護対象を確認してください。</p>',()=>applyPreview());}
+function showPreview(){const d=preview.data,group=level=>preview.warn.filter(w=>w.level===level);openForm('10日全体プレビュー',`<p class="tiny muted">10日間すべての日付を確認してください。AI案を見ただけでは保存されず、選んだ項目だけ採用します。</p>`+(['要確認','情報'].map(level=>group(level).length?`<details class="card" ${level==='要確認'?'open':''}><summary>${level} · ${group(level).length}件</summary>${group(level).map(w=>`<p class="tiny">${html(w.text)}</p>`).join('')}</details>`:'').join(''))+d.plans.map(p=>{const topic=V7_OFFICIAL_TOPICS.find(t=>t.id===p.themeId),storyOnly=p.format==='投稿なし';return `<details class="card editorial-day-preview"><summary>Day${html(p.dayNumber)}｜${html(short(p.date))} · ${html(p.format)}${topic?' · '+html(topic.group)+' #'+html(topic.number):''}</summary>${storyOnly?'<p class="tiny muted">Feed／Reelなし・Story案のみ</p>':`<p class="tiny muted">正式テーマ：${html(topic?.title||'指定なし（mainTopicを使用）')}</p><h3>${html(p.mainTopic)}</h3><p><strong>主目的：</strong>${html(p.primaryPurpose)}</p><p><strong>お客様に届ける価値：</strong>${html(p.customerValue)}</p><p><strong>使用商品：</strong>${html((p.products||[]).map(skuLabel).join(' / ')||'商品なし')}</p><p><strong>メイン本文</strong><br>${html(p.mainPostBody)}</p>`}${[1,2,3,4].map(n=>`<p><strong>Story ${n}</strong><br>${html(p['story'+n].text)}${n===2&&/アンケート|二択/.test(String(p.story2.kind||''))?`<br>アンケート<br>選択肢①：${html(p.story2.options?.[0]||'未設定')}<br>選択肢②：${html(p.story2.options?.[1]||'未設定')}`:''}</p>`).join('')}${storyOnly?'':`<p><strong>CTA：</strong>${html(p.CTA||'CTAなし')}</p>`}</details>`;}).join('')+'<p class="tiny muted">選択した枠・項目だけ保存します。</p>',()=>applyPreview());}
 const renderPeriodPreview=showPreview;
 showPreview=function(){
   renderPeriodPreview();
   const {period,data}=preview,form=dx('#workForm');
-  form.insertAdjacentHTML('afterbegin',`<p class="tiny muted">対象期間：${html(short(period.from))}〜${html(short(period.to))}・Day${period.dayFrom}〜${period.dayFrom+dayDiff(period.to,period.from)}</p>`);
-  const protectedDays=data.plans.map(plan=>{const post=demo.posts.find(p=>p.date===plan.date&&!p.deleted),lock=importProtection(post);if(!post||!lock.whole&&!post.manual&&!lock.stories.some(Boolean))return null;return `${short(plan.date)}：${lock.whole?'既存投稿全体を維持':[lock.caption?'手動本文を維持':'',...lock.stories.flatMap((value,i)=>value?[`Story${i+1}を維持`]:[])].filter(Boolean).join('・')}`;}).filter(Boolean);
+  for(const plan of data.plans){
+    const choice=preview.approvals[plan.date];if(!choice)continue;
+    const post=editorialPostForDate(demo.posts,plan.date),posted=importProtection(post).whole,storyOnly=plan.format==='投稿なし';
+    const postRows=storyOnly?[]:post?[['meta','企画',post.theme||'',plan.mainTopic],['caption','本文',post.caption||'',plan.mainPostBody],['cta','CTA',post.cta||'',plan.CTA||''],['products','商品',(post.skuIds||[]).map(skuLabel).join(' / ')||'商品なし',(plan.products||[]).map(skuLabel).join(' / ')||'商品なし'],['shots','撮影指示',(post.shots||[]).map(shot=>shot.what).join(' / '),(plan.shots||[]).map(shot=>shot.what).join(' / ')]]:[['createPost','Feed／Reel投稿','未登録',plan.mainTopic]];
+    const rows=[...postRows,...[1,2,3,4].map(slot=>{const found=V7StoryState.entriesOnDate(demo,plan.date).filter(entry=>entry.slot===slot);return ['story'+slot,'Story '+slot,found[0]?.story.text||'未登録',plan['story'+slot].text,found.length>1||found[0]?.post||found[0]&&v7StoryHasReaction(demo,found[0].story,found[0].story.id,slot)];})];
+    const card=form.querySelectorAll('.editorial-day-preview')[data.plans.indexOf(plan)];
+    card?.insertAdjacentHTML('beforeend',`<div class="card"><strong>この日のAI案を採用する項目</strong><p class="tiny">初期状態は現在の内容を維持します。選んだ項目だけ変更します。</p>${rows.map(([key,label,current,incoming,locked])=>`<label class="pick-name"><input type="checkbox" data-editorial-approve="${html(plan.date)}|${key}" ${(key.startsWith('story')?locked:posted)?'disabled':''}>${html(label)}${key==='createPost'?'を新規作成':'をAI案へ置き換える'}${locked?'（反応付き・旧形式、または重複のため変更不可）':''}</label><p class="tiny">現在：${html(current)}<br>AI案：${html(incoming)}</p>${key==='shots'&&post?(plan.shots||[]).map((shot,index)=>{const old=post.shots?.[index],canKeep=old?.id&&old.media===shot.media&&(!shot.id||shot.id===old.id);return canKeep?`<label class="pick-name"><input type="checkbox" data-editorial-same-shot="${html(plan.date)}|${index}">${index+1}カット目を同じカットとして扱う（撮影済みを維持）</label>`:'';}).join(''):''}${key.startsWith('story')&&!locked?`<details><summary>${html(label)}を編集して採用</summary><textarea rows="3" data-editorial-story-edit="${html(plan.date)}|${key.slice(5)}">${html(incoming)}</textarea></details>`:''}`).join('')}</div>`);
+  }
+  form.querySelectorAll('[data-editorial-approve]').forEach(input=>input.onchange=()=>{const [date,key]=input.dataset.editorialApprove.split('|'),choice=preview.approvals[date];if(key.startsWith('story')){const slot=Number(key.slice(5));choice.stories=input.checked?[...new Set([...choice.stories,slot])]:choice.stories.filter(value=>value!==slot);}else choice[key]=input.checked;});
+  form.querySelectorAll('[data-editorial-same-shot]').forEach(input=>input.onchange=()=>{const [date,indexText]=input.dataset.editorialSameShot.split('|'),choice=preview.approvals[date],index=Number(indexText);choice.sameShots=input.checked?[...new Set([...choice.sameShots,index])]:choice.sameShots.filter(value=>value!==index);});
+  form.querySelectorAll('[data-editorial-story-edit]').forEach(input=>input.oninput=()=>{const [date,slotText]=input.dataset.editorialStoryEdit.split('|'),slot=Number(slotText),plan=preview.data.plans.find(row=>row.date===date),approve=form.querySelector(`[data-editorial-approve="${date}|story${slot}"]`);if(!plan||!approve||approve.disabled)return;plan['story'+slot].text=input.value;approve.checked=true;approve.dispatchEvent(new Event('change'));});
+  form.insertAdjacentHTML('afterbegin',`<p class="tiny muted">対象期間：${html(short(period.from))}〜${html(short(period.to))}・Day${period.dayFrom??1}〜${(period.dayFrom??1)+dayDiff(period.to,period.from)}</p>`);
+ const protectedDays=data.plans.map(plan=>{const post=editorialPostForDate(demo.posts,plan.date),lock=importProtection(post);if(!post||!lock.whole&&!post.manual&&!lock.stories.some(Boolean)&&!lock.shots)return null;return `${short(plan.date)}：${post.date!==plan.date||lock.whole?'既存投稿全体を維持':[lock.meta?'企画を維持':'',lock.caption?'手動本文を維持':'',lock.cta?'CTAを維持':'',lock.products?'商品を維持':'',lock.shots?'撮影を維持':'',...lock.stories.flatMap((value,i)=>value?[`Story${i+1}を維持`]:[])].filter(Boolean).join('・')}`;}).filter(Boolean);
   if(protectedDays.length)form.insertAdjacentHTML('afterbegin',`<div class="notice"><strong>保存時に維持する編集内容</strong>${protectedDays.map(line=>`<p class="tiny">${html(line)}</p>`).join('')}</div>`);
-  for(const date of Object.keys(preview.legacyChoices)){const post=demo.posts.find(p=>p.date===date&&!p.deleted),controls=[['meta','企画・商品・CTA'],['caption','本文'],...[0,1,2,3].map(i=>['story'+i,`Story${i+1}`])];form.insertAdjacentHTML('afterbegin',`<details class="card" open><summary>${html(short(date))}｜従来の手動編集を確認</summary><p class="tiny">旧データは編集箇所を特定できません。初期状態は全項目を維持します。新案に置き換えてよい項目だけチェックを外してください。投稿済みは変更できません。</p><p class="tiny">現在：${html(post.theme||'')} ／ 新案：${html(data.plans.find(p=>p.date===date).mainTopic)}</p>${controls.map(([key,label])=>`<label class="pick-name"><input type="checkbox" data-legacy-preserve="${html(date)}|${key}" checked>${label}を維持</label>`).join('')}</details>`);}
+  for(const date of Object.keys(preview.legacyChoices).filter(date=>!preview.approvals[date])){const post=demo.posts.find(p=>p.date===date&&!p.deleted),controls=[['meta','企画・商品・CTA'],['caption','本文'],...[0,1,2,3].map(i=>['story'+i,`Story${i+1}`])];form.insertAdjacentHTML('afterbegin',`<details class="card" open><summary>${html(short(date))}｜従来の手動編集を確認</summary><p class="tiny">旧データは編集箇所を特定できません。初期状態は全項目を維持します。新案に置き換えてよい項目だけチェックを外してください。投稿済みは変更できません。</p><p class="tiny">現在：${html(post.theme||'')} ／ 新案：${html(data.plans.find(p=>p.date===date).mainTopic)}</p>${controls.map(([key,label])=>`<label class="pick-name"><input type="checkbox" data-legacy-preserve="${html(date)}|${key}" checked>${label}を維持</label>`).join('')}</details>`);}
   form.querySelectorAll('[data-legacy-preserve]').forEach(input=>input.onchange=()=>{const [date,key]=input.dataset.legacyPreserve.split('|'),choice=preview.legacyChoices[date];if(key.startsWith('story'))choice.stories[Number(key.slice(5))]=input.checked;else choice[key]=input.checked;});
-  form.querySelectorAll('.editorial-day-preview summary').forEach((summary,i)=>{summary.textContent=summary.textContent.replace(/^Day\d+/,`Day${data.plans[i].dayNumber}`);});
-  const audit=qualityAudit(data.plans),issues=preview.warn.filter(note=>note.level==='要修正'),topics={},formats={},purposes={},research=data.plans.filter(plan=>{const topic=OFFICIAL_TOPICS.find(entry=>entry.id===plan.themeId);return topic?.number>=66&&topic.number<=80;});
-  for(const plan of data.plans){const topic=OFFICIAL_TOPICS.find(entry=>entry.id===plan.themeId);topics[topic?.group||'未分類']=(topics[topic?.group||'未分類']||0)+1;formats[plan.format]=(formats[plan.format]||0)+1;purposes[plan.primaryPurpose]=(purposes[plan.primaryPurpose]||0)+1;}
+  form.querySelectorAll('.editorial-day-preview > summary').forEach((summary,i)=>{summary.textContent=summary.textContent.replace(/^Day\d+/,`Day${data.plans[i].dayNumber}`);});
+  const audit=qualityAudit(data.plans),issues=preview.warn.filter(note=>note.level==='要修正'),topics={},formats={},purposes={},research=data.plans.filter(plan=>{const topic=V7_OFFICIAL_TOPICS.find(entry=>entry.id===plan.themeId);return topic?.researchRequired;});
+  for(const plan of data.plans){const topic=V7_OFFICIAL_TOPICS.find(entry=>entry.id===plan.themeId);if(plan.format!=='投稿なし'){topics[topic?.group||'未分類']=(topics[topic?.group||'未分類']||0)+1;purposes[plan.primaryPurpose]=(purposes[plan.primaryPurpose]||0)+1;}formats[plan.format]=(formats[plan.format]||0)+1;}
   const story2Valid=data.plans.filter(plan=>!story2Issue(plan.story2)).length,story2Kinds={};for(const plan of data.plans){const kind=story2Kind(plan.story2);story2Kinds[kind]=(story2Kinds[kind]||0)+1;}
   const roleIssues=issues.filter(note=>/Story3とStory4|Story4にメイン投稿/.test(note.text)),roleDates=new Set(roleIssues.flatMap(note=>data.plans.filter(plan=>note.text.startsWith(short(plan.date)+'：')).map(plan=>plan.date))),quizCount=data.plans.filter(plan=>story2Kind(plan.story2)==='クイズ').length,ctaCount=data.plans.filter(plan=>String(plan.CTA||'').trim()).length;
-  const overview=`<details class="card" open><summary>期間全体の確認｜${data.plans.length}投稿</summary><p class="tiny">主目的：${html(Object.entries(purposes).map(([key,count])=>`${key} ${count}件`).join(' / '))}（固定比率なし）</p><p class="tiny">正式テーマ分類：${html(Object.entries(topics).map(([key,count])=>`${key} ${count}件`).join(' / '))}</p><p class="tiny">形式：${html(Object.entries(formats).map(([key,count])=>`${key} ${count}件`).join(' / '))}</p><p class="tiny">Story2参加形式：正常 ${story2Valid}/${data.plans.length}件（${html(Object.entries(story2Kinds).map(([kind,count])=>`${kind} ${count}件`).join(' / '))}）</p><p class="tiny">Story3/4：役割分離 ${data.plans.length-roleDates.size}/${data.plans.length}件 ／ クイズ ${quizCount}件（任意）</p><p class="tiny">CTAあり ${ctaCount}件 ／ CTAなし ${data.plans.length-ctaCount}件（任意）</p><p class="tiny">${issues.length?`要修正 ${issues.length}件`:'要修正なし・確認済み'}</p></details>`;
+  const overview=`<details class="card" open><summary>期間全体の確認｜${data.plans.length}日・Story各4枠</summary><p class="tiny">主目的：${html(Object.entries(purposes).map(([key,count])=>`${key} ${count}件`).join(' / '))}（固定比率なし）</p><p class="tiny">正式テーマ分類：${html(Object.entries(topics).map(([key,count])=>`${key} ${count}件`).join(' / '))}</p><p class="tiny">形式：${html(Object.entries(formats).map(([key,count])=>`${key} ${count}件`).join(' / '))}</p><p class="tiny">Story2参加形式：正常 ${story2Valid}/${data.plans.length}件（${html(Object.entries(story2Kinds).map(([kind,count])=>`${kind} ${count}件`).join(' / '))}）</p><p class="tiny">Story3/4：役割分離 ${data.plans.length-roleDates.size}/${data.plans.length}件 ／ クイズ ${quizCount}件（任意）</p><p class="tiny">CTAあり ${ctaCount}件（Feed／Reelのみ・任意）</p><p class="tiny">${issues.length?`要修正 ${issues.length}件`:'要修正なし・確認済み'}</p></details>`;
   const researchPanel=research.length?`<div class="card"><strong>要リサーチ｜出典確認前</strong>${research.map(plan=>`<p class="tiny">${html(short(plan.date))}：${html((plan.researchSources||[]).map(researchSourceText).join(' / ')||'出典なし')}</p>`).join('')}<label class="pick-name"><input type="checkbox" id="editorialResearchConfirm">出典と事実を自分で確認しました</label></div>`:'';
   const exposureNotes=audit.exposure.issues.filter(note=>note.level==='商品露出要確認');
   const panel=overview+`<details class="card" open><summary>商品露出チェック</summary>${audit.exposure.summary.map(line=>`<p class="tiny">${html(line)}</p>`).join('')}${exposureNotes.map(note=>`<p class="notice">${html(note.text)}</p>`).join('')}${exposureNotes.length?'<label class="pick-name"><input type="checkbox" id="editorialExposureConfirm">繰り返す各日のangle・顧客価値・商品との関連性を確認し、同じ商品の再利用が企画上必要と判断しました</label>':''}<p class="tiny muted">月間販売予定・販売状態・priority・広告候補・直近10/20実投稿の露出を参照。数値だけで一律NGにせず、理由を確認します。</p></details>`+researchPanel+`${issues.length?`<div class="notice"><strong>要修正 ${issues.length}件：このまま保存できません。ChatGPTで10日全体を再作成してください。</strong>${issues.slice(0,24).map(note=>`<p>${html(note.text)}</p>`).join('')}${issues.length>24?`<p>ほか${issues.length-24}件。繰り返しの多い企画は期間全体で見直してください。</p>`:''}</div>`:''}`;
   form.querySelector('.editorial-day-preview')?.insertAdjacentHTML('beforebegin',panel);
   const save=form.querySelector('.save-foot button'),status=document.createElement('p');status.className='notice';save.before(status);
-  const selectedCount=()=>data.plans.filter(plan=>{const post=demo.posts.find(p=>p.date===plan.date&&!p.deleted),lock=importProtection(post,preview.legacyChoices[plan.date]);return !lock.whole;}).length;
+  const selectedCount=()=>data.plans.filter(plan=>{const choice=preview.approvals[plan.date];return choice&&Object.entries(choice).some(([key,value])=>!['v7Selection','sameShots'].includes(key)&&(Array.isArray(value)?value.length:value));}).length;
   const ready=()=>!issues.length&&selectedCount()>0&&(!research.length||preview.researchConfirmed)&&(!exposureNotes.length||preview.exposureConfirmed);
   const updateSave=()=>{const count=selectedCount();status.textContent=`新案を反映する日：${count}件／${data.plans.length}件。保護する日は旧案を維持します。`;save.disabled=!ready();save.textContent=issues.length?'要修正・保存できません':count===0?'反映する日がありません':research.length||exposureNotes.length?'確認後に保存':'保存する';};
   form.querySelectorAll('[data-legacy-preserve]').forEach(input=>input.addEventListener('change',updateSave));
+  form.querySelectorAll('[data-editorial-approve]').forEach(input=>input.addEventListener('change',updateSave));
   if(research.length)form.querySelector('#editorialResearchConfirm').onchange=event=>{preview.researchConfirmed=event.target.checked;updateSave();};
   if(exposureNotes.length)form.querySelector('#editorialExposureConfirm').onchange=event=>{preview.exposureConfirmed=event.target.checked;updateSave();};
   updateSave();
@@ -233,38 +277,54 @@ async function savePreview(target){
   if(period.from!==target.period.from||period.to!==target.period.to)throw Error('対象期間が変わりました。プレビューを開き直してください。');
   if(validate(target.data).some(note=>note.level==='要修正'))throw Error('10日全体の内容を修正してから再度取り込んでください。');
   if(qualityAudit(target.data.plans).exposure.issues.some(note=>note.level==='商品露出要確認')&&!target.exposureConfirmed)throw Error('商品露出の企画理由を確認してください。');
-  if(target.data.plans.some(plan=>{const topic=OFFICIAL_TOPICS.find(entry=>entry.id===plan.themeId);return topic?.number>=66&&topic.number<=80;})&&!target.researchConfirmed)throw Error('INDUSTRYの出典確認が必要です。');
-  for(const plan of target.data.plans){const old=demo.posts.find(p=>p.date===plan.date&&!p.deleted),seen=target.revisions[plan.date];if((old?.id||null)!==(seen?.id||null)||(old?.revision||null)!==(seen?.revision||null))throw Error(`${short(plan.date)}の投稿がプレビュー中に変更されました。開き直して確認してください。`);}
-  const eligible=target.data.plans.filter(plan=>!importProtection(demo.posts.find(p=>p.date===plan.date&&!p.deleted),target.legacyChoices[plan.date]).whole);
+  if(target.data.plans.some(plan=>{const topic=V7_OFFICIAL_TOPICS.find(entry=>entry.id===plan.themeId);return topic?.researchRequired;})&&!target.researchConfirmed)throw Error('該当テーマの出典確認が必要です。');
+  for(const plan of target.data.plans){const old=editorialPostForDate(demo.posts,plan.date),seen=target.revisions[plan.date];if((old?.id||null)!==(seen?.id||null)||(old?.revision||null)!==(seen?.revision||null))throw Error(`${short(plan.date)}の投稿がプレビュー中に変更されました。開き直して確認してください。`);}
+   const eligible=target.data.plans.filter(plan=>{const choice=target.approvals?.[plan.date];return choice&&Object.entries(choice).some(([key,value])=>!['v7Selection','sameShots'].includes(key)&&(Array.isArray(value)?value.length:value));});
   if(!eligible.length)throw Error('すべての投稿が保護されています。置き換える項目を明示的に選ぶか、現在の内容を維持してください。');
-  const previousPosts=demo.posts,previousPeriod=displayedPeriod,nextPosts=structuredClone(demo.posts);
+   const previousPosts=demo.posts,previousStoryDays=demo.storyDays,previousShotDone=demo.shotDone,previousPeriod=displayedPeriod,nextPosts=structuredClone(demo.posts),nextStoryDays=structuredClone(demo.storyDays||[]),nextShotDone=structuredClone(demo.shotDone||{});
   for(const x of target.data.plans){
-    const old=nextPosts.find(p=>p.date===x.date&&!p.deleted),lock=importProtection(old,target.legacyChoices[x.date]);
-    if(lock.whole)continue;
-    const topic=OFFICIAL_TOPICS.find(t=>t.id===x.themeId),base=old||{id:newId(),date:x.date,plannedTime:'18:00',actualAt:null,revision:0,manual:false,shots:[],reviewNeeded:[]};
-    const stories=[x.story1,x.story2,x.story3,x.story4].map((story,i)=>lock.stories[i]?base.stories[i]:({...story,slot:i+1,purpose:STORY_ROLES[i],skuIds:story.skuIds||[],storySpecVersion:4}));
-    if(!lock.meta){
-      const oldShots=old?.shots||[],protectedShotIds=new Set(stories.filter((_,i)=>lock.stories[i]).map(story=>story.shotId).filter(Boolean));
-      const newShots=x.shots.map((shot,i)=>({...shot,id:base.id+'-editorial-shot-r'+((base.revision||0)+1)+'-'+(i+1),signature:[base.id,'editorial',i,shot.media,shot.what,...shot.skuIds].join('|')}));
+     const old=editorialPostForDate(nextPosts,x.date),choice=target.approvals?.[x.date],lock=importProtection(old,choice||target.legacyChoices[x.date]);
+     if(!choice||!Object.entries(choice).some(([key,value])=>!['v7Selection','sameShots'].includes(key)&&(Array.isArray(value)?value.length:value)))continue;
+    const topic=V7_OFFICIAL_TOPICS.find(t=>t.id===x.themeId),base=old||{id:newId(),date:x.date,plannedTime:'18:00',actualAt:null,revision:0,manual:false,shots:[],reviewNeeded:[]};
+     const stories=structuredClone(base.stories||[]),state={...demo,posts:nextPosts,storyDays:nextStoryDays};
+     for(let slot of choice.stories){
+       if(!Number.isInteger(slot)||slot<1||slot>4)throw Error('Story番号を確認してください。');
+       const matches=V7StoryState.entriesOnDate(state,x.date).filter(entry=>entry.slot===slot);
+       if(matches.length>1)throw Error(`${short(x.date)}のStory ${slot}が重複しています。変更を保存しませんでした。`);
+       const current=matches[0],candidate={...x['story'+slot],slot,purpose:STORY_ROLES[slot-1],skuIds:x['story'+slot].skuIds||[],storySpecVersion:4};
+       if(JSON.stringify(matches.map(entry=>JSON.stringify(entry.story)))!==JSON.stringify(target.storySnapshot[x.date][slot-1]))throw Error(`Story ${slot}はプレビュー後に変更されました。開き直してください。`);
+       if(current?.post)throw Error(`Story ${slot}は旧形式の記録です。直接置き換えず、個別に確認してください。`);
+       if(current&&v7StoryHasReaction(state,current.story,current.story.id,slot))throw Error(`Story ${slot}は反応が記録されているため置き換えできません。`);
+       const adopted={...v7AdoptAiStory(current?.story,candidate,slot,x.date),editorialSource:'chatgpt-ten-day'};
+       if(current?.standalone)nextStoryDays[current.index]=adopted;
+       else nextStoryDays.push(V7StoryState.createStandalone(state,x.date,slot,adopted,()=>adopted.id));
+     }
+     if(x.format==='投稿なし'||old&&old.date!==x.date||lock.whole||!old&&!choice.createPost||old&&!['meta','caption','cta','products','shots'].some(key=>choice[key]))continue;
+    if(!lock.shots){
+       const oldShots=old?.shots||[],protectedShotIds=new Set((old?.stories||[]).filter((_,i)=>lock.stories[i]).map(story=>story.shotId).filter(Boolean));
+      const newShots=editorialAdoptShots(oldShots,x.shots,choice.sameShots||[]);editorialRetainShotDone(oldShots,newShots,nextShotDone);
       const sourceIds=new Map(x.shots.map((shot,i)=>[shot.id,newShots[i].id]).filter(([id])=>id));
-      for(const [i,story] of stories.entries())if(!lock.stories[i]&&story.shotId){story.shotId=sourceIds.get(story.shotId)||story.shotId;}
-      base.shots=[...newShots,...oldShots.filter(shot=>protectedShotIds.has(shot.id))];
+      for(const story of stories)if(story.shotId&&!lock.stories[story.slot-1]){story.shotId=sourceIds.get(story.shotId)||story.shotId;}
+       base.shots=[...newShots,...oldShots.filter(shot=>protectedShotIds.has(shot.id)&&!newShots.some(next=>next.id===shot.id))];
       base.shotsAuthoritative=true;
       base.sequence=newShots.map((shot,i)=>({order:i+1,words:'',shotId:shot.id}));
     }
-    if(!lock.meta)Object.assign(base,{format:x.format,primaryAxis:x.primaryPurpose,parentId:topic?.id||null,themeId:topic?.id||null,topicGroup:topic?.group||null,theme:x.mainTopic,derivedTheme:x.mainTopic,takeaway:x.customerValue,cta:x.CTA||'',skuIds:[...(x.products||[])],researchRequired:!!topic?.researchRequired,researchSources:x.researchSources||[],researchVerified:topic?.number>=66&&topic.number<=80?target.researchConfirmed:false});
-    Object.assign(base,{caption:lock.caption?base.caption:x.mainPostBody,stories,revision:(base.revision||0)+1,editorialSource:'chatgpt-import'});
+    if(lock.shots)for(const story of stories)if(story.shotId&&!lock.stories[story.slot-1]&&!base.shots.some(shot=>shot.id===story.shotId))delete story.shotId;
+    if(!lock.meta)Object.assign(base,{format:x.format,primaryAxis:x.primaryPurpose,parentId:topic?.id||null,themeId:topic?.id||null,topicGroup:topic?.group||null,theme:x.mainTopic,derivedTheme:x.mainTopic,takeaway:x.customerValue,researchRequired:!!topic?.researchRequired,researchSources:x.researchSources||[],researchVerified:topic?.number>=66&&topic.number<=80?target.researchConfirmed:false});
+    if(!lock.cta)base.cta=x.CTA||'';
+    if(!lock.products)base.skuIds=[...(x.products||[])];
+     Object.assign(base,{caption:lock.caption?base.caption:x.mainPostBody,stories,revision:(base.revision||0)+1,editorialSource:'chatgpt-import'});
     const shotIds=new Set((base.shots||[]).map(shot=>shot.id));
     if(shotIds.size!==(base.shots||[]).length)throw Error(`${short(x.date)}の撮影IDが重複しています。`);
     if([...(base.sequence||[]),...stories].some(row=>row.shotId&&!shotIds.has(row.shotId)))throw Error(`${short(x.date)}の撮影IDと構成・Storyの参照が一致しません。`);
     if(!old)nextPosts.push(base);
     if(base.manualFields)base.manualFields.revision=base.revision;
   }
-  demo.posts=nextPosts;
+   demo.posts=nextPosts;demo.storyDays=nextStoryDays;demo.shotDone=nextShotDone;
   displayedPeriod=period.from===salesCycleBlock().nextFrom?'next':'current';
-  try{localStorage.setItem(MOCK_KEY,JSON.stringify(demo));}catch(e){demo.posts=previousPosts;displayedPeriod=previousPeriod;throw Error('端末への保存に失敗しました。容量とブラウザの保存設定を確認してください。');}
+   try{localStorage.setItem(MOCK_KEY,JSON.stringify(demo));}catch(e){demo.posts=previousPosts;demo.storyDays=previousStoryDays;demo.shotDone=previousShotDone;displayedPeriod=previousPeriod;throw Error('端末への保存に失敗しました。容量とブラウザの保存設定を確認してください。');}
   target.localApplied={count:eligible.length,total:target.data.plans.length};
-  target.savedPostIds=target.data.plans.map(plan=>demo.posts.find(post=>post.date===plan.date&&!post.deleted)?.id).filter(Boolean);
+   target.savedPostIds=eligible.map(plan=>demo.posts.find(post=>post.date===plan.date&&!post.deleted)?.id).filter(Boolean);
   persist();await window.todo2SyncBridge.flush(window.todo2SyncBridge.read(),target.savedPostIds);finishPreview(target);
 }
 function finishPreview(target){const {count,total}=target.localApplied;refreshWork();preview=null;previewDialog.close();toast(`${count}投稿へ反映しました${count<total?'。保護対象は旧案を維持しました':''}`);}
@@ -272,8 +332,8 @@ function copyText(scope){const selected=scope==='ten-day'&&displayedPeriod==='ne
 const oldPlan=renderPlan;renderPlan=function(){oldPlan();for(const button of document.querySelectorAll('#planList [data-work-post]')){const post=demo.posts.find(p=>p.id===button.dataset.workPost),badge=button.closest('article')?.querySelector('.row.between .badge:last-child');if(post&&badge)badge.textContent=post.format==='Reel'?'Reel':'Feed';}const box=dx('#planPeriodCard .actions');if(box){box.innerHTML='<button class="secondary" id="copyTenEditorial">ChatGPT用10日企画をコピー</button><button class="ghost" id="importTenEditorial">JSONを貼り付ける</button>';dx('#copyTenEditorial').onclick=()=>copyText('ten-day');dx('#importTenEditorial').onclick=()=>openImport();}};
 const oldMonth=renderMonthWork;renderMonthWork=function(){oldMonth();const head=dx('#view-month > .row');if(head&&!dx('#copyMonthEditorial'))head.insertAdjacentHTML('afterend','<article class="card"><h3>月間編集計画</h3><p>販売・商品・履歴・反応をまとめてChatGPTへ渡します。</p><button class="secondary full" id="copyMonthEditorial">ChatGPT用月間コンテキストをコピー</button></article>');dx('#copyMonthEditorial')?.addEventListener('click',()=>copyText('month'),{once:true});};
 const SINGLE_SCOPE='single-day-reproposal';
-const protectedPost=p=>!!(p?.manual||p?.actualAt||p?.actualSnapshot||p?.noPostConfirmedAt||p?.deleted||p?.stories?.some(s=>s.manual));
-function savedPlan(p){const topic=OFFICIAL_TOPICS.find(t=>t.id===p.parentId);return {date:p.date,dayNumber:Number(cycleDay(p.date).replace(/\D/g,'')),format:p.format,primaryPurpose:p.primaryAxis,customerValue:p.takeaway||'',themeId:topic?.id||null,themeCategory:topic?.group||'',editorialSource:p.editorialSource||null,mainTopic:p.theme||'',angle:p.derivedTheme||'',products:[...(p.skuIds||[])],mainPostBody:p.caption||'',story1:p.stories?.[0]||{text:''},story2:p.stories?.[1]||{text:''},story3:p.stories?.[2]||{text:''},story4:p.stories?.[3]||{text:''},CTA:p.cta||'',shots:structuredClone(p.shots||[])};}
+const protectedPost=p=>!!(p?.manual||p?.actualAt||p?.actualSnapshot||p?.noPostConfirmedAt||p?.deleted||p?.stories?.some(s=>s.manual||demo.reactions.some(reaction=>reaction.sourceStory?.storyId&&reaction.sourceStory.storyId===s.id)));
+function savedPlan(p){const topic=ALL_OFFICIAL_TOPICS.find(t=>t.id===p.parentId);return {date:p.date,dayNumber:Number(cycleDay(p.date).replace(/\D/g,'')),format:p.format,primaryPurpose:p.primaryAxis,customerValue:p.takeaway||'',themeId:topic?.id||null,themeCategory:topic?.group||'',editorialSource:p.editorialSource||null,mainTopic:p.theme||'',angle:p.derivedTheme||'',products:[...(p.skuIds||[])],mainPostBody:p.caption||'',story1:p.stories?.[0]||{text:''},story2:p.stories?.[1]||{text:''},story3:p.stories?.[2]||{text:''},story4:p.stories?.[3]||{text:''},CTA:p.cta||'',shots:structuredClone(p.shots||[])};}
 function periodReview(posts){
  const plans=posts.map(savedPlan),notes=warnings(plans).map(w=>w.text),dates=rows=>rows.map(p=>short(p.date)).join('、');
  const exposure=plans.map(p=>({plan:p,ids:[...new Set([...p.products,...[1,2,3,4].flatMap(n=>p['story'+n]?.skuIds||[])])]}));
@@ -294,8 +354,8 @@ function periodReview(posts){
  for(const p of posts){const local=[...storyCheck(p,p.stories||[]),...storyWarnings(p)];for(const note of new Set(local))notes.push(`${short(p.date)}：${note}`);}
  return [...new Set(notes)];
 }
-function singleContext(p){const broad=context('ten-day'),currentWarnings=periodReview(rangePosts()),others=rangePosts().filter(other=>other.id!==p.id&&!other.deleted).map(savedPlan);return {schema:SCHEMA,scope:SINGLE_SCOPE,target:savedPlan(p),currentWarnings,targetWarnings:currentWarnings.filter(note=>note.includes(short(p.date))),otherDays:others,actualHistory:broad.actualHistory,productExposure:broad.productExposure,monthlySaleStrategy:broad.monthly.saleStrategy,officialTopics:broad.officialTopics,products:broad.products};}
-function singlePrompt(p){const data=singleContext(p);return `cian en paclamの10日企画のうち、対象日だけを修正してください。他の日は変更しないでください。対象日のメインテーマを維持するか変更するかは、警告と10日全体のバランスを見て判断し、変更不要ならthemeIdを維持してください。重複語句の言い換えだけで済ませず、問い・結論・見せ方・企画構造まで確認し、企画角度そのものを変えてください。他の日と似ない内容にしてください。Story1は知識・有益・楽しさ、Story2は参加・対話、Story3は商品・革・ものづくりの発見、Story4は今日のメイン投稿への導線です。Story2は顧客とのコミュニケーションとして設計してください。Story3を商品紹介欄に固定しないでください。Story4を投稿タイトルの言い換えだけにしないでください。商品を出さないStoryも、CTAなしの日も認めます。Feed / Reelのみを使い、INDUSTRY 66〜80は出典確認が必要です。顧客価値を明示し、既存の手動編集・投稿済みデータは変更しないでください。\n\n返答は説明なしの1日分JSONだけ：{"schema":"${SCHEMA}","scope":"${SINGLE_SCOPE}","plan":{"date":"${p.date}","dayNumber":${data.target.dayNumber},"format":"Reel","primaryPurpose":"CUSTOMER_VALUE","customerValue":"...","themeId":"official-01","themeCategory":"LEATHER","mainTopic":"...","angle":"...","products":[],"mainPostBody":"...","story1":{"text":"...","action":"..."},"story2":{"text":"...","action":"..."},"story3":{"text":"...","action":"..."},"story4":{"text":"...","action":"..."},"CTA":null}}\n\n再提案コンテキスト：\n${JSON.stringify(data,null,2)}`;}
+function singleContext(p){const broad=context('ten-day'),currentWarnings=periodReview(rangePosts()),others=rangePosts().filter(other=>other.id!==p.id&&!other.deleted).map(savedPlan);return {schema:SCHEMA,scope:SINGLE_SCOPE,target:savedPlan(p),currentWarnings,targetWarnings:currentWarnings.filter(note=>note.includes(short(p.date))),otherDays:others,actualHistory:broad.actualHistory,productExposure:broad.productExposure,monthlySaleStrategy:broad.monthly.saleStrategy,officialTopics:broad.officialTopics,legacyOfficialTopics:broad.legacyOfficialTopics,products:broad.products};}
+function singlePrompt(p){const data=singleContext(p);return `cian en paclamの10日企画のうち、対象日だけを修正してください。他の日は変更しないでください。対象日のメインテーマを維持するか変更するかは、警告と10日全体のバランスを見て判断し、変更不要なら新v7-official-* IDだけ維持してください。対象が旧official-* IDの場合は過去の意味を保持しつつ、新しい提案のthemeIdにはv7-official-* IDかnullだけを指定してください。重複語句の言い換えだけで済ませず、問い・結論・見せ方・企画構造まで確認し、企画角度そのものを変えてください。他の日と似ない内容にしてください。Story1は知識・有益・楽しさ、Story2は参加・対話、Story3は商品・革・ものづくりの発見、Story4は今日のメイン投稿への導線です。Story2は顧客とのコミュニケーションとして設計してください。Story3を商品紹介欄に固定しないでください。Story4を投稿タイトルの言い換えだけにしないでください。商品を出さないStoryも、CTAなしの日も認めます。Feed / Reelのみを使い、事実や最新情報には出典確認が必要です。顧客価値を明示し、既存の手動編集・投稿済みデータは変更しないでください。\n\n返答は説明なしの1日分JSONだけ：{"schema":"${SCHEMA}","scope":"${SINGLE_SCOPE}","plan":{"date":"${p.date}","dayNumber":${data.target.dayNumber},"format":"Reel","primaryPurpose":"CUSTOMER_VALUE","customerValue":"...","themeId":"v7-official-01","themeCategory":"革を知る","mainTopic":"...","angle":"...","products":[],"mainPostBody":"...","story1":{"text":"...","action":"..."},"story2":{"text":"...","action":"..."},"story3":{"text":"...","action":"..."},"story4":{"text":"...","action":"..."},"CTA":null}}\n\n再提案コンテキスト：\n${JSON.stringify(data,null,2)}`;}
 function validateSingle(data,date){
  if(data?.schema!==SCHEMA||data.scope!==SINGLE_SCOPE||!data.plan||Array.isArray(data.plan)||data.plans)throw Error('1日再提案用JSONのschema・scope・planを確認してください。');
  const p=data.plan;
@@ -312,15 +372,17 @@ function validateSingle(data,date){
  return topic||null;
 }
 function singleDayShotUpdate(post,plan,stories){
- if(!Object.prototype.hasOwnProperty.call(plan,'shots'))return {stories};
+ const occupied=new Set(V7StoryState.entriesOnDate(demo,post.date).filter(entry=>entry.post?.id!==post.id).map(entry=>entry.slot));
+ const datedStories=stories.filter(story=>!occupied.has(story.slot)).map(story=>newStoryIdentity({date:post.stories?.find(old=>old.slot===story.slot)?.date??post.date},story));
+ if(!Object.prototype.hasOwnProperty.call(plan,'shots'))return {stories:datedStories};
  const revision=(post.revision||0)+1,sourceIds=new Map();
  const shots=plan.shots.map((shot,index)=>{const id=`${post.id}-single-shot-r${revision}-${index+1}`;if(shot.id)sourceIds.set(shot.id,id);return {...shot,id,signature:`single-editorial|${post.id}|${revision}|${index+1}`};});
- const linkedStories=stories.map(story=>story.shotId?{...story,shotId:sourceIds.get(story.shotId)}:story);
+ const linkedStories=datedStories.map(story=>story.shotId?{...story,shotId:sourceIds.get(story.shotId)}:story);
  if(linkedStories.some(story=>story.shotId===undefined&&Object.prototype.hasOwnProperty.call(story,'shotId')))throw Error('Storyの撮影IDが対象日のshotsに存在しません。');
  return {stories:linkedStories,shots,sequence:shots.map((shot,index)=>({order:index+1,words:'',shotId:shot.id}))};
 }
 function planComparison(p,before){
- const topic=OFFICIAL_TOPICS.find(t=>t.id===p.themeId);
+ const topic=V7_OFFICIAL_TOPICS.find(t=>t.id===p.themeId);
  const changed=key=>before&&JSON.stringify(p[key]??'')!==JSON.stringify(before[key]??'');
  const row=(label,value,keys)=>`<p class="${keys.some(changed)?'editorial-diff':''}"><strong>${label}</strong>${keys.some(changed)?'<span class="badge">変更</span>':''}<br>${value}</p>`;
  return row('日付・Day・形式',`${html(p.date)} · Day${html(p.dayNumber)} · ${html(p.format)}`,['date','dayNumber','format'])+
@@ -336,6 +398,38 @@ function planComparison(p,before){
 }
 let singlePreview=null;
 function showSinglePreview(){const {postId,before,after,revision}=singlePreview,post=demo.posts.find(p=>p.id===postId),protectedNow=protectedPost(post);openForm('1日再提案｜変更前・変更後',`<p class="tiny muted">${html(short(after.date))}だけを差し替えます。他の日は変更しません。</p>${protectedNow?'<p class="notice">この投稿は保護されています。ChatGPT案を見ることはできますが、自動確定できません。</p>':''}<details class="card"><summary>変更前｜保存済み</summary>${planComparison(before)}</details><details class="card" open><summary>変更後｜ChatGPT案</summary>${planComparison(after,before)}</details><p class="tiny muted">確定後に10日全体の重複・偏りを再確認します。</p>`,()=>{const current=demo.posts.find(p=>p.id===postId);if(!current||current.date!==after.date||protectedPost(current))throw Error('この投稿は保護されています。自動確定できません。');if(current.revision!==revision)throw Error('プレビュー中に投稿が更新されました。開き直して確認してください。');const topic=validateSingle({schema:SCHEMA,scope:SINGLE_SCOPE,plan:after},current.date);const stories=[1,2,3,4].map((n,i)=>({...after['story'+n],slot:n,purpose:STORY_ROLES[i],skuIds:after['story'+n].skuIds||[],storySpecVersion:4}));const shotUpdate=singleDayShotUpdate(current,after,stories);Object.assign(current,{format:after.format,primaryAxis:after.primaryPurpose,parentId:topic?.id||null,themeId:topic?.id||null,topicGroup:topic?.group||null,theme:after.mainTopic,derivedTheme:after.angle||after.mainTopic,takeaway:after.customerValue,caption:after.mainPostBody,cta:after.CTA||'',skuIds:[...after.products],subjects:'',stories:shotUpdate.stories,...(shotUpdate.shots?{shots:shotUpdate.shots,sequence:shotUpdate.sequence,shotsAuthoritative:true}:{}),researchRequired:!!topic?.researchRequired,revision:(current.revision||0)+1,editorialSource:'chatgpt-import'});persist();refreshWork();singlePreview=null;const notes=periodReview(rangePosts());dx('#workDialog').close();openForm('10日全体の再チェック',notes.length?`<p class="notice">要確認 ${notes.length}件</p><div class="card">${notes.map(note=>`<p class="tiny">${html(note)}</p>`).join('')}</div>`:'<p>10日全体の重複・偏り警告はありません。</p>',()=>false);dx('#workForm .save-foot button').textContent='確認しました';dx('#workForm .save-foot button').type='button';dx('#workForm .save-foot button').onclick=()=>dx('#workDialog').close();return false;});const save=dx('#workForm .save-foot button');save.textContent=protectedNow?'保護中・自動確定できません':'この日だけ確定する';if(protectedNow)save.disabled=true;}
+function showSingleOptInPreview(){
+ const {postId,before,after,revision}=singlePreview,post=demo.posts.find(value=>value.id===postId);
+ if(!post)throw Error('対象投稿が見つかりません。');
+ const locked=!!(post.actualAt||post.actualSnapshot||post.noPostConfirmedAt||post.deleted||post.posted||post.status==='posted');
+ const date=post.standaloneStoryDate??post.date;
+ const rows=[['meta','企画',before.mainTopic,after.mainTopic],['caption','本文',before.mainPostBody,after.mainPostBody],['cta','CTA',before.CTA||'',after.CTA||''],['products','商品',(before.products||[]).map(skuLabel).join(' / ')||'商品なし',(after.products||[]).map(skuLabel).join(' / ')||'商品なし'],['shots','撮影指示',(before.shots||[]).map(shot=>shot.what).join(' / '),(after.shots||[]).map(shot=>shot.what).join(' / ')],...[1,2,3,4].map(slot=>{const matches=V7StoryState.entriesOnDate(demo,date).filter(entry=>entry.slot===slot);return ['story'+slot,'Story '+slot,matches[0]?.story.text||'未登録',after['story'+slot].text,matches.length>1||matches[0]&&v7StoryHasReaction(demo,matches[0].story,matches[0].post?.id||matches[0].story.id,slot)];})];
+ openForm('1日再提案｜変更前・変更後',`<p class="tiny muted">${html(short(after.date))}のうち、選んだ項目だけ変更します。初期状態は現在の内容を維持します。</p>${rows.map(([key,label,current,incoming,storyLocked])=>`<label class="pick-name"><input type="checkbox" name="singleApprove" value="${key}" ${locked||storyLocked?'disabled':''}>${html(label)}をAI案へ置き換える${storyLocked?'（反応が記録されているため変更不可）':''}</label><p class="tiny">現在：${html(current)}<br>AI案：${html(incoming)}</p>${key==='shots'&&Object.hasOwn(after,'shots')?after.shots.map((shot,index)=>{const old=post.shots?.[index],canKeep=old?.id&&old.media===shot.media&&(!shot.id||shot.id===old.id);return canKeep?`<label class="pick-name"><input type="checkbox" name="singleSameShot" value="${index}">${index+1}カット目を同じカットとして扱う（撮影済みを維持）</label>`:'';}).join(''):''}`).join('')}`,form=>{
+  const approved=new Set(form.getAll('singleApprove'));
+  if(!approved.size)throw Error('変更する項目を選んでください。');
+  const current=demo.posts.find(value=>value.id===postId);
+  if(!current||current.date!==after.date||current.revision!==revision||current.actualAt||current.actualSnapshot||current.noPostConfirmedAt||current.deleted||current.posted||current.status==='posted')throw Error('投稿の状態が変わりました。開き直して確認してください。');
+  const topic=validateSingle({schema:SCHEMA,scope:SINGLE_SCOPE,plan:after},current.date),next=structuredClone(demo),target=next.posts.find(value=>value.id===postId),storyDate=target.standaloneStoryDate??target.date;
+  if(approved.has('meta'))Object.assign(target,{format:after.format,primaryAxis:after.primaryPurpose,parentId:topic?.id||null,themeId:topic?.id||null,topicGroup:topic?.group||null,theme:after.mainTopic,derivedTheme:after.angle||after.mainTopic,takeaway:after.customerValue,researchRequired:!!topic?.researchRequired});
+  if(approved.has('caption'))target.caption=after.mainPostBody;
+  if(approved.has('cta'))target.cta=after.CTA||'';
+  if(approved.has('products'))target.skuIds=[...after.products];
+  if(approved.has('shots')&&Object.hasOwn(after,'shots')){const oldShots=target.shots||[],newShots=editorialAdoptShots(oldShots,after.shots,form.getAll('singleSameShot'));editorialRetainShotDone(oldShots,newShots,next.shotDone);target.shots=newShots;target.sequence=newShots.map((shot,index)=>({order:index+1,words:'',shotId:shot.id}));target.shotsAuthoritative=true;}
+  for(let slot=1;slot<=4;slot++)if(approved.has('story'+slot)){
+   const matches=V7StoryState.entriesOnDate(next,storyDate).filter(entry=>entry.slot===slot);
+   if(matches.length>1)throw Error(`Story ${slot}が重複しています。保存しませんでした。`);
+   const found=matches[0];if(found?.post)throw Error(`Story ${slot}は旧形式の記録です。個別に確認してください。`);
+   if(found&&v7StoryHasReaction(next,found.story,found.story.id,slot))throw Error(`Story ${slot}は反応が記録されているため置き換えできません。`);
+   const proposed={...after['story'+slot],slot,purpose:STORY_ROLES[slot-1],skuIds:after['story'+slot].skuIds||[]},adopted=v7AdoptAiStory(found?.story,proposed,slot,storyDate);
+   if(found?.standalone)next.storyDays[found.index]=adopted;else next.storyDays.push(V7StoryState.createStandalone(next,storyDate,slot,adopted,()=>adopted.id));
+  }
+  target.revision=(target.revision||0)+1;target.editorialSource='chatgpt-import';
+  if(target.manualFields?.revision===revision&&!target.manualFields.unknown)target.manualFields.revision=target.revision;
+  const previous=demo;demo=next;try{persist();}catch(error){demo=previous;throw error;}
+  refreshWork();singlePreview=null;toast('選んだ項目だけ保存しました');return false;
+ });
+ const save=dx('#workForm .save-foot button');save.textContent=locked?'投稿済みのため変更できません':'選んだ項目だけ保存';if(locked)save.disabled=true;
+}
 function openSingleImport(id){const post=demo.posts.find(p=>p.id===id&&!p.deleted);if(post)openImport(post.id);}
 function openSingle(id){const post=demo.posts.find(p=>p.id===id&&!p.deleted);if(!post)return;dx('#dayDialog').close();openForm('ChatGPTでこの日を再提案',`<p><strong>${html(planDay(post.date))}</strong></p>${protectedPost(post)?'<p class="notice">この投稿は保護されています。ChatGPT案を見ることはできますが、自動確定できません。</p>':''}<p>現在の警告と10日全体、実投稿・商品履歴を一緒にコピーします。</p><button type="button" class="secondary full" id="copySingleEditorial">再提案用プロンプトをコピー</button><button type="button" class="ghost full" id="pasteSingleEditorial">1日分JSONを貼り付ける</button>`,()=>false);dx('#workForm .save-foot').hidden=true;dx('#copySingleEditorial').onclick=()=>navigator.clipboard.writeText(singlePrompt(post)).then(()=>toast('1日再提案用プロンプトをコピーしました'));dx('#pasteSingleEditorial').onclick=()=>openSingleImport(post.id);}
 const editorialShowPost=showPost;showPost=function(id){
@@ -364,7 +458,7 @@ prompt=function(scope){const text=contentPrompt(scope);if(scope!=='ten-day')retu
 function nextEditorialContext(){
  const block=salesCycleBlock();if(!block)throw Error('次の期間を計算できません。販売日を確認してください。');
  const from=block.nextFrom,to=block.nextTo,data=context('ten-day'),history=postHistories(from,to,planContext(from).recentLimit);
- data.period={from,to,days:Array.from({length:dayDiff(to,from)+1},(_,i)=>{const date=dayAdd(from,i);return {date,dayNumber:block.nextDayFrom+i,blocked:blocked(date)};})};
+ data.period={from,to,days:Array.from({length:dayDiff(to,from)+1},(_,i)=>{const date=dayAdd(from,i);return {date,dayNumber:(block.nextDayFrom??1)+i,blocked:blocked(date)};})};
  data.actualHistory={count:history.actualHistory.length,posts:history.actualHistory};
  data.plannedPosts={count:history.plannedPosts.length,posts:history.plannedPosts};
  data.notPostedHistory=noPostHistory(from);
@@ -372,6 +466,7 @@ function nextEditorialContext(){
  data.reviews=reviewContext(history.actualPostIds);
  data.customerFeedback=feedbackContext(history.actualPostIds);
  data.monthly.saleStrategy=monthlySaleStrategy(from,to);
+ data.storyHistory=V7StoryState.historyEntries(demo,{before:from,limitDays:30}).map(entry=>({date:entry.date,slot:entry.slot,status:entry.status,text:entry.story.text||'',asset:entry.story.asset||'',action:entry.story.action||'',skuIds:entry.story.skuIds||[]}));
  data.balance.existing=demo.posts.filter(p=>!p.deleted&&p.date>=from&&p.date<=to).reduce((counts,p)=>(counts[p.primaryAxis]=(counts[p.primaryAxis]||0)+1,counts),{});
  return data;
 }
@@ -404,27 +499,34 @@ const pollSinglePrompt=singlePrompt;
 singlePrompt=function(post){return pollSinglePrompt(post)+'\nStory2をアンケート・二択・「どちら／どっち／選んで」の質問にする場合は、kindをアンケートまたは二択にし、質問文と意味が対応する異なる選択肢2つをstory2.options配列に必ず入れてください。質問だけで選択肢を省略しないでください。';};
 const planWithNextEditorial=renderPlan;
 let displayedPeriod='current';
+function editorialPostContents(post){
+ const cuts=(post.shots||[]).map((shot,index)=>`<li><strong>Cut ${index+1}</strong>：${html(shot.what||'指示未設定')} <span class="tiny muted">（${shotDoneFor(shot)?'撮影済み':'未撮影'}）</span></li>`).join('');
+ return `<details class="editorial-post-contents" data-v7-post-summary="${html(post.id)}"><summary>内容を見る</summary><div class="editorial-post-contents-body"><strong>本文</strong><p class="exact">${html(post.caption||'未設定')}</p><strong>CTA</strong><p class="exact">${html(post.cta||'未設定')}</p><strong>撮影指示</strong>${cuts?`<ol>${cuts}</ol>`:'<p class="muted">未設定</p>'}</div></details>`;
+}
 renderPlan=function(){
  planWithNextEditorial();
  const next=dx('#planPeriodCard .next-plan-period');if(!next)return;
  const period=salesCycleBlock(),list=dx('#planList');
  const nextPosts=demo.posts.filter(post=>!post.deleted&&post.date>=period.nextFrom&&post.date<=period.nextTo).sort((a,b)=>a.date.localeCompare(b.date));
- if(!list||!nextPosts.length)return;
+ if(!list)return;
  const currentCards=[...list.children],currentGroup=document.createElement('div'),nextGroup=document.createElement('div');
  currentGroup.className=nextGroup.className='stack';
  currentCards.forEach(card=>currentGroup.append(card));
  list.append(currentGroup,nextGroup);
+  const showPostContents=group=>{for(const button of group.querySelectorAll('[data-work-post]')){const post=demo.posts.find(value=>!value.deleted&&value.id===button.dataset.workPost),card=button.closest('article.card');if(post&&card){button.textContent='編集する';const axis=card.querySelector('.row:not(.between) .badge');if(axis)axis.textContent=Object.hasOwn(AXES,post.primaryAxis)?`${post.primaryAxis.replaceAll('_',' ')}｜${axisShort[post.primaryAxis]}`:'主目的未確認';if(!card.querySelector('[data-v7-planning-reason]'))button.insertAdjacentHTML('beforebegin',`<details class="editorial-planning-reason" data-v7-planning-reason><summary>企画意図を見る</summary><p class="exact">${html(post.planningReason||'未設定')}</p></details>`);if(!card.querySelector('[data-v7-post-summary]'))button.insertAdjacentHTML('beforebegin',editorialPostContents(post));}}};
+  showPostContents(currentGroup);
  for(let date=period.nextFrom;date<=period.nextTo;date=dayAdd(date,1)){
   const post=nextPosts.find(entry=>entry.date===date),day=`Day${period.nextDayFrom+dayDiff(date,period.nextFrom)}｜${short(date)}`;
   if(!post){if(blocked(date))nextGroup.insertAdjacentHTML('beforeend',`<article class="card blocked-day-card"><span class="badge">${html(day)}</span><h3>投稿不可</h3></article>`);continue;}
-  nextGroup.insertAdjacentHTML('beforeend',`<article class="card"><div class="row between"><span class="badge">${html(day)}</span><span class="badge">${post.format==='Reel'?'Reel':'Feed'}</span></div><p class="tiny muted">${html(topicLabel(post))}</p><h3>${html(post.derivedTheme||post.theme)}</h3><p>${html(post.takeaway||'伝えることは未確認')}</p><p class="exact muted">${html(post.skuIds?.length?postLabel(post):post.subjects||'革・工程・道具')}</p><div class="row"><span class="badge">${html(axisShort[post.primaryAxis]||'主目的未確認')}</span><span class="tiny">${post.stories?.length||0} Story · ${(post.shots||[]).reduce((count,shot)=>count+(shot.count||0),0)}カット</span></div>${post.researchRequired?'<p class="notice">要リサーチ</p>':''}<p class="tiny">${post.actualAt?'投稿済み':post.paused?'投稿休止':blocked(date)?'投稿不可日':'予定'}${post.manual?' / 編集済み':''}</p><button class="secondary full" data-work-post="${html(post.id)}">投稿内容を見る・編集</button></article>`);
+  nextGroup.insertAdjacentHTML('beforeend',`<article class="card"><div class="row between"><span class="badge">${html(day)}</span><span class="badge">${post.format==='Reel'?'Reel':'Feed'}</span></div><p class="tiny muted">${html(topicLabel(post))}</p><h3>${html(post.derivedTheme||post.theme)}</h3><p>${html(post.takeaway||'伝えることは未確認')}</p><p class="exact muted">${html(post.skuIds?.length?postLabel(post):post.subjects||'革・工程・道具')}</p><div class="row"><span class="badge">${html(axisShort[post.primaryAxis]||'主目的未確認')}</span><span class="tiny">${post.stories?.length||0} Story · ${(post.shots||[]).reduce((count,shot)=>count+(shot.count||0),0)}カット</span></div>${post.researchRequired?'<p class="notice">要リサーチ</p>':''}<p class="tiny">${post.actualAt?'投稿済み':post.paused?'投稿休止':blocked(date)?'投稿不可日':'予定'}${post.manual?' / 編集済み':''}</p><button class="secondary full" data-work-post="${html(post.id)}">編集する</button></article>`);
  }
+  showPostContents(nextGroup);
  const switcher=document.createElement('div');switcher.className='actions';switcher.innerHTML=`<button type="button" class="secondary" data-editorial-period="current">現在：${html(short(period.from))}〜${html(short(period.to))}</button><button type="button" class="secondary" data-editorial-period="next">次：${html(short(period.nextFrom))}〜${html(short(period.nextTo))}</button>`;
  next.after(switcher);
  const select=target=>{displayedPeriod=target;currentGroup.hidden=target!=='current';nextGroup.hidden=target!=='next';dx('#planAxisSummary').hidden=target==='next';dx('#planDateWork').textContent=target==='next'?planPeriodLabel(period.nextFrom,period.nextTo,period.nextDayFrom,period.nextDayTo):planPeriodLabel(period.from,period.to,period.dayFrom,period.dayTo);dx('#copyTenEditorial').textContent=`ChatGPT用10日企画をコピー（${target==='next'?'次':'現在'}）`;switcher.querySelectorAll('button').forEach(button=>button.classList.toggle('active',button.dataset.editorialPeriod===target));};
  switcher.querySelectorAll('button').forEach(button=>button.onclick=()=>select(button.dataset.editorialPeriod));select(displayedPeriod);
 };
-document.head.insertAdjacentHTML('beforeend','<style>#planList .stack[hidden],#planAxisSummary[hidden]{display:none!important}[data-editorial-period].active{background:#384f3b;color:#fff}</style>');
+ document.head.insertAdjacentHTML('beforeend','<style>#planList .stack[hidden],#planAxisSummary[hidden]{display:none!important}[data-editorial-period].active{background:#384f3b;color:#fff}#planList .editorial-post-contents{min-width:0;margin:10px 0;border:1px solid #d6dccb;border-radius:10px}#planList .editorial-post-contents summary{min-height:44px;display:flex;align-items:center;padding:10px 12px;cursor:pointer;font-weight:600}#planList .editorial-post-contents-body{min-width:0;padding:0 12px 12px;overflow-wrap:anywhere}#planList .editorial-post-contents-body p{white-space:pre-wrap;margin:6px 0 14px}#planList .editorial-post-contents-body ol{padding-left:24px;margin:8px 0}#planList .editorial-post-contents-body li{margin:6px 0;white-space:pre-wrap;overflow-wrap:anywhere}</style>');
 let pendingManualStory=null;
 document.addEventListener('click',event=>{
  const button=event.target.closest('button');if(!button)return;
@@ -441,8 +543,8 @@ const shootPrompt=prompt;
 prompt=function(scope){const text=shootPrompt(scope);return scope==='ten-day'?text.replace('返答は説明文を付けずJSONだけにしてください。',shootRules+'\n\n返答は説明文を付けずJSONだけにしてください。'):text;};
 const shootSinglePrompt=singlePrompt;
 singlePrompt=function(post){return shootSinglePrompt(post)+'\n'+shootRules;};
-const currentEditorialRules=`現在の販売周期の10日プランは7｜商品・販売・信頼、2｜新しい人に届ける、1｜楽しむ・知る・役立つを基本目安とする。永久固定比率ではない。Feed/Reelは商品・販売を中心にし、楽しむ・知る・役立つは特にStory1で補う。
-Story1は革の毎日解説や販売枠ではなく、ファッション・カルチャー・生活・社会の「今」を少し深く知る小さなメディア。ジャンル目安はファッション35%、旅・ホテル10%、音楽・若者文化7%、デザイン・家具・建築10%、食・生活文化13%、映画・アニメ10%、本・出版5%、その他・経済・社会10%。数日〜複数周期で偏りを防ぐ。具体的な固有名詞・確認できる事実・今扱う理由・意外性を備え、単なるニュース要約や商品への無理な接続を避ける。歴史的題材は現在の再評価・流行との接点を示す。story1.textには出典名とURLも記載し、story1.assetには題材そのものを示す写真1枚と実使用時の権利確認を指定する。現在性が必要なら資料の日付を確認し、確認できない事実を創作しない。
+const currentEditorialRules=`3軸は固定比率にしません。CUSTOMER VALUE、INSTAGRAM GROWTH、BUSINESSをその日の顧客価値と販売周期に応じて選びます。StoryはFeed/Reelの付属物ではなく日付単位で準備します。
+Story1は毎日見る理由です。見たい・知りたい・役立つ・楽しむを、その日の暮らしや関心から選びます。革の授業や販売告知だけに偏らず、正式100テーマも番号順に消費しません。固有の事実を扱うときは出典と日付を確かめ、未確認の事実やお客様の声を創作しないでください。使う写真・動画は実際に準備できるものを提案してください。
 Story1〜4は各投稿で写真1枚、動画なら短い1本で成立させる。2枚比較・3都市比較・Before/Afterの2枚並置・手持ちとバッグ収納の2枚・正面光と斜め光の2枚は禁止。比較も代表する1枚で成立させる。Story2は参加・対話で質問箱／アンケート／二択／クイズを使い分け、問いや形式の連日反復を避ける。アンケート・二択には質問に対応するoptionsを必ず2つ付ける。Story3は商品・革・ものづくりの発見であり単なる広告欄にしない。Story4は今日のFeed/Reelで具体的に確認できることへの導線とし、Story3の言い換え、クイズの答えの持ち越し、単なる「投稿を見て」を避ける。
 新規生成・再提案は期間の役割→主目的→テーマ→商品→本文→Story1〜4→撮影の順に決め、primaryPurpose/primaryAxis、themeId/parentId、themeCategory/topicGroup、theme/derivedTheme/mainTopic、angle、products/skuIds、mainPostBody/caption、CTA、Stories、shotsを対象日ごとに一体で確認する。themeとderivedThemeが共存する場合は完全一致。投稿全体のproductsには扱う商品を、各shot・Story3のskuIdsには実際に写るSKUだけを入れ、全カットへ投稿全体のSKUを機械的に複製しない。保存済み・手動編集済み・投稿済みを勝手に上書きしない。ただし明示的に変更する対象日は古いテーマだけ残さず関連項目を一体更新する。過去日・実投稿履歴を新ルールのためだけに自動修正しない。最終的に画面へ渡る主目的・テーマ・本文・Story・撮影・SKUの整合を確認する。`;
 const priorEditorialPrompt=prompt;
@@ -456,10 +558,24 @@ prompt=function(scope){
 };
 const priorSinglePrompt=singlePrompt;
 singlePrompt=function(post){return priorSinglePrompt(post).replace('Story1は知識・有益・楽しさ','Story1はファッション・カルチャー・生活・社会の「今」を扱う').replace('返答は説明なしの1日分JSONだけ：',currentEditorialRules+'\n\n返答は説明なしの1日分JSONだけ：')+'\n撮影を変更する場合だけplan.shotsを指定してください。省略時は既存shotsを維持します。指定時は1〜30件の配列とし、各shotにmedia（写真／動画）、what（撮影指示）、count（1〜20の整数）、skuIds（そのカットに実際に写る商品管理SKU IDの配列）を入れます。idは任意ですが、StoryのshotIdで参照する場合はshot.idを指定し、実在するshot.idだけを参照してください。shots:[]は受け付けません。';};
-const officialThemeRule='themeIdは正式100テーマに本当に一致するときだけ、その実在するofficial-* IDを指定してください。販売ラインナップ・発売告知・POP UP案内など一致する正式テーマがなければthemeId:null（または省略）とし、themeCategoryも省略できます。架空のofficial IDやextra-*をthemeIdに入れないでください。mainTopicは正式テーマ参照の有無にかかわらず必須です。';
+const officialThemeRule='themeIdは正式100テーマに本当に一致するときだけ、その実在するv7-official-* IDを指定してください。販売ラインナップ・発売告知・POP UP案内など一致する正式テーマがなければthemeId:null（または省略）とし、themeCategoryも省略できます。架空のv7-official IDやextra-*をthemeIdに入れないでください。mainTopicは正式テーマ参照の有無にかかわらず必須です。';
 const editorialPromptWithOfficialRule=prompt;
 prompt=function(scope){const text=editorialPromptWithOfficialRule(scope);return scope==='ten-day'?text+'\n\n'+officialThemeRule:text;};
 const singlePromptWithOfficialRule=singlePrompt;
 singlePrompt=function(post){return singlePromptWithOfficialRule(post)+'\n\n'+officialThemeRule;};
+const contextBeforeDailyStories=context;
+context=function(scope){const data=contextBeforeDailyStories(scope),from=data.period.from;if(scope==='ten-day')data.period.days=data.period.days.map((day,index)=>({...day,dayNumber:day.dayNumber||((salesCycleBlock()?.dayFrom??1)+index)}));data.storyHistory=V7StoryState.historyEntries(demo,{before:from,limitDays:30}).map(entry=>({date:entry.date,slot:entry.slot,status:entry.status,text:entry.story.text||'',asset:entry.story.asset||'',action:entry.story.action||'',skuIds:entry.story.skuIds||[]}));return data;};
+const promptBeforeDailyStories=prompt;
+prompt=function(scope){if(scope!=='ten-day')return promptBeforeDailyStories(scope);return promptBeforeDailyStories(scope)
+ .replace('投稿不可日はplansへ含めず、投稿可能日はすべてplansに含めてください。','投稿不可日も含む10日間の全日付をplansへ含め、Feed／Reelがない日はformatを「投稿なし」にしてください。全日でStory1〜4を提案します。')
+ .replace('各planのshotsにメイン投稿の撮影指示を必ず入れ','Feed／Reelがあるplanだけshotsにメイン投稿の撮影指示を必ず入れ')
+ .replace('本文は全日300文字以上。','Feed／Reelがある日の本文は300文字以上。')
+ .replace('Story4は今日のFeed/Reelで具体的に確認できることへの導線','Story4はFeed／Reelがある日はその投稿への具体的な導線、ない日は商品・販売日・保存など自然な次の行動')
+ .replace('Story4：今日のメイン投稿への自然な導線','Story4：その日の内容に合う自然な次の行動')
+ .replace('Story4はその日のメイン投稿を見る独立した具体的な導線','Story4は投稿がある日はその投稿へ、投稿がない日は商品・販売日・保存などへの具体的な導線')
+ .replace('Story1：ファッション・カルチャー・生活・社会の「今」を知る。','Story1：見たい・知りたい・役立つ・楽しむにつながる毎日見る理由。')
+ .replace('Story1はメインの要約ではなく、今のファッション・カルチャー・生活・社会を扱う。','Story1はメイン投稿の要約ではなく、その日に見る理由を作る。')
+ .replace('Story2は参加・対話で質問箱／アンケート／二択／クイズを使い分け','Story2は自然な会話を基本とし、必要な日だけ質問箱／アンケート／二択／クイズを使い分け')
+ +'\n\n【10日分の独立Story・最優先】plansは期間内の10日すべてを日付順に含めてください。各planにstory1〜story4のtext・asset・action・materialMode・skuIdsを含めます。Feed／Reelがない日は {"date":"YYYY-MM-DD","dayNumber":1,"format":"投稿なし","story1":{"text":"...","asset":"...","action":"...","materialMode":"過去素材使用可","skuIds":[]},"story2":{...},"story3":{...},"story4":{...}} の形にし、投稿本文・撮影指示・テーマIDなどの投稿専用項目は不要です。Story1は毎日見る理由、Story2は会話（毎日質問しない）、Story3は月間販売SKUの補完、Story4はその日に合う自然な次の行動です。正式100テーマは番号順に消費せず、引き出しとして使ってください。storyHistoryには投稿のない日を含む過去Storyがあります。案は提案であり保存・採用は利用者が枠ごとに決めます。';};
 window.editorialPlanner={context,prompt,nextContext:nextEditorialContext,nextPrompt:nextEditorialPrompt,extract,validate,warnings,singleContext,singlePrompt,validateSingle,periodReview};refreshWork();
 })();

@@ -1,0 +1,12 @@
+{
+  "hosting": {
+    "site": "todo-app-2-v7",
+    "public": "dist",
+    "ignore": [
+      "firebase.json",
+      "**/.*",
+      "**/node_modules/**"
+    ],
+    "predeploy": "node qa-v7-hosting.cjs"
+  }
+}

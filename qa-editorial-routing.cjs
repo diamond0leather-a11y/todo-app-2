@@ -8,15 +8,15 @@ const post={id:'post-1',date:'2026-10-11',revision:2};
 const calls=[];
 const context={
  SCHEMA:'cian-editorial-v1',SINGLE_SCOPE:'single-day-reproposal',previewSaving:false,
- demo:{posts:[post]},
+ demo:{posts:[post],storyDays:[]},V7StoryState:require('./dist/v7-story-state.js'),
  openForm(title,body,save){context.title=title;context.body=body;context.save=save;},
  validate(data){calls.push('ten-day');if(!Array.isArray(data.plans))throw Error('10日企画のplansを確認してください。');return [];},
  validateSingle(data,date){calls.push('single-day');if(data.plan?.date!==date||data.plan?.format==='invalid')throw Error('単日再提案の形式を確認してください。');},
  savedPlan:()=>({date:post.date}),importPeriod:()=>({from:post.date,to:post.date}),
- showPreview(){calls.push('ten-preview');},showSinglePreview(){calls.push('single-preview');}
+ showPreview(){calls.push('ten-preview');},showSinglePreview(){calls.push('single-preview');},showSingleOptInPreview(){calls.push('single-preview');}
 };
 vm.createContext(context);
-vm.runInContext('let preview=null;let singlePreview=null;'+section('function normalizeJsonQuotes(', 'function warnings(')+section('function openImport(', 'function showPreview('),context);
+vm.runInContext('let preview=null;let singlePreview=null;'+section('function normalizeJsonQuotes(', 'function warnings(')+section('function editorialPostForDate(', 'function validateEditorialShots(')+section('function openImport(', 'function showPreview('),context);
 const submit=(raw,target)=>{context.openImport(target);assert.equal(context.title,'ChatGPT JSONを取り込む');assert.match(context.body,/textarea name="json"/);return context.save({get:()=>raw});};
 const ten={schema:context.SCHEMA,scope:'ten-day',plans:[{date:post.date}]};
 const single={schema:context.SCHEMA,scope:context.SINGLE_SCOPE,plan:{date:post.date,format:'Feed'}};

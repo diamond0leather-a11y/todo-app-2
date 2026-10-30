@@ -7,8 +7,8 @@ const root=__dirname;
 const source=fs.readFileSync(path.join(root,'daily-cycle.js'),'utf8');
 const html=fs.readFileSync(path.join(root,'dist/index.html'),'utf8');
 const between=(text,start,end)=>{const a=text.indexOf(start),b=text.indexOf(end,a+start.length);assert(a>=0&&b>a,start);return text.slice(a,b);};
-const logic=between(source,'function salesResult(month){','function showSaleTargets(month){');
-assert.equal(logic,between(html,'function salesResult(month){','function showSaleTargets(month){'),'source/public parity');
+const logic=between(source,'function saleRoot(month){','function showSaleTargets(month){');
+assert.equal(logic,between(html,'function saleRoot(month){','function showSaleTargets(month){'),'source/public parity');
 assert(!logic.includes('saleTargetSnapshot')&&!logic.includes('.lineup'),'saved snapshot and monthly lineup do not decide targets');
 assert(!html.includes('ensureFutureSaleTargetSnapshots('),'render and sync do not regenerate snapshots');
 
@@ -62,9 +62,16 @@ function run(text){
  ctx.editSalesResult('2026-10','final');
  assert(['oct','always','both'].every(id=>body.includes('data-sku="'+id+'"'))&&!body.includes('data-sku="dec"'),'final form uses the same set');
  assert(body.includes('対象合計：3SKU')&&[...body.matchAll(/class="sales-result-row"/g)].length===3,'final total and actual SKU rows agree');
- vm.runInContext(between(source,'const targetMonthRender=renderMonthWork;','document.addEventListener(')+'\nrenderMonthWork()',Object.assign(ctx,{renderMonthWork:()=>{},monthCursor:'2026-10'}));
+ vm.runInContext(between(source,'const targetMonthRender=renderMonthWork;','const datedSalesHomeRender=renderHome;')+'\nrenderMonthWork()',Object.assign(ctx,{renderMonthWork:()=>{},monthCursor:'2026-10'}));
+ assert.equal(ctx.api.monthlyResultRows('2026-10','initial').length,3,'three actual target SKUs');
  assert(nodes['#monthSaleSummary'].innerHTML.includes('販売対象：3SKU'));
- assert.equal(nodes['#saleWork'].textContent,'販売対象3SKUを確認');
+ assert.equal(nodes['#saleWork'].textContent,'販売対象を確認（3件）');
+ demo.months['2026-10'].date='';
+ assert.equal(ctx.api.monthlyResultRows('2026-10','initial').length,0,'no sale date means zero target SKUs');
+ ctx.renderMonthWork();
+ assert(nodes['#monthSaleSummary'].innerHTML.includes('販売対象：0SKU'));
+ assert.equal(nodes['#saleWork'].textContent,'販売対象を確認（0件）');
+ demo.months['2026-10'].date='2026-10-04';
  demo.salesResults['2026-10']={initial:{saleDate:'2026-10-04',rows:[{skuId:'oct',quantity:2,price:100},{skuId:'legacy',quantity:4,price:50}]}};
  assert.equal(ctx.api.monthlyResultRows('2026-10','initial').find(row=>row.skuId==='oct').quantity,2,'saved target quantity is restored');
  ctx.editSalesResult('2026-10','initial');
@@ -76,7 +83,7 @@ function run(text){
  return ids('2026-11','initial');
 }
 assert.deepEqual(run(logic),['nov','both']);
-assert.deepEqual(run(between(html,'function salesResult(month){','function showSaleTargets(month){')),['nov','both']);
+assert.deepEqual(run(between(html,'function saleRoot(month){','function showSaleTargets(month){')),['nov','both']);
 const cycleCode=between(html,'function saleCandidateCycle(date=TODAY){','const salesMonthRender=renderMonthWork;');
 const cycleDemo=fixture();
 const cycle=vm.runInNewContext(cycleCode+'\nsaleCandidateCycle',{demo:cycleDemo,dayAdd:(date,days)=>new Date(Date.parse(date+'T12:00:00Z')+days*86400000).toISOString().slice(0,10),saleRestockLineup:()=>[]});
