@@ -59,7 +59,7 @@ function qaExecutionHtml(html){
  if(!html.includes('</head>')||!html.includes('</body>'))throw Error('QA用HTMLの挿入位置が見つかりません');
  return html.replace('</head>',qaPrelude+'</head>').replace('</body>',qaFixture+'</body>');
 }
-http.createServer((request,response)=>{
+const server=http.createServer((request,response)=>{
   const pathname=decodeURIComponent(new URL(request.url,'http://127.0.0.1').pathname);
   if(pathname==='/qa-execution'){
     fs.readFile(path.join(publicDir,'index.html'),'utf8',(error,html)=>{
@@ -81,4 +81,6 @@ http.createServer((request,response)=>{
   const file=path.resolve(publicDir,relative);
   if(file!==publicDir&&!file.startsWith(publicDir+path.sep)){response.writeHead(403);response.end();return;}
   fs.readFile(file,(error,content)=>{if(error){response.writeHead(404);response.end();return;}response.writeHead(200,{'content-type':mime[path.extname(file)]||'application/octet-stream','cache-control':'no-store'});response.end(content);});
-}).listen(port,'127.0.0.1',()=>console.log(`Isolated v7 QA server: http://127.0.0.1:${port}/ (Firebase scripts blocked)`));
+});
+if(require.main===module)server.listen(port,'127.0.0.1',()=>console.log(`Isolated v7 QA server: http://127.0.0.1:${port}/ (Firebase scripts blocked)`));
+module.exports={qaCaption,qaExecutionHtml};
