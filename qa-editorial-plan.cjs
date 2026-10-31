@@ -3,6 +3,9 @@ const fs=require('node:fs');
 const vm=require('node:vm');
 
 const source=fs.readFileSync('dist/chatgpt-editorial.js','utf8');
+assert.doesNotMatch(source,/300文字以上|INDUSTRY\s*#?66〜80/,'AI向けの新規本文条件・旧テーマ分類を残さない');
+assert.match(source,/Feed／Reelがある日の本文は500文字以上/,'10日プランのAI本文条件');
+assert.match(source,/singlePrompt=function\(post\).*本文は500文字以上/,'単日再提案のAI本文条件');
 const section=(from,to)=>source.slice(source.indexOf(from),source.indexOf(to));
 const date='2026-10-11';
 const ctx={SCHEMA:'cian-editorial-v1',SINGLE_SCOPE:'single-day-reproposal',
@@ -19,7 +22,7 @@ const original=ctx.validateEditorialPlan;
 let sharedCalls=0;
 ctx.validateEditorialPlan=(...args)=>{sharedCalls++;return original(...args);};
 
-const plan=()=>({date,dayNumber:7,format:'Feed',primaryPurpose:'BUSINESS',customerValue:'商品を比較できる',themeId:'v7-official-01',themeCategory:'革を知る',mainTopic:'新商品の紹介',angle:'形を見る',products:['sku-a'],mainPostBody:'商品の形を具体的に紹介します。'.repeat(30),
+const plan=()=>({date,dayNumber:7,format:'Feed',primaryPurpose:'BUSINESS',customerValue:'商品を比較できる',themeId:'v7-official-01',themeCategory:'革を知る',mainTopic:'新商品の紹介',angle:'形を見る',products:['sku-a'],mainPostBody:'商品の形を具体的に紹介します。'.repeat(35),
  story1:{text:'今のファッションを知る',asset:'写真',materialMode:'新規撮影必要',action:'読む'},
  story2:{text:'どちらを詳しく見たいですか？',kind:'アンケート',options:['外側','内側'],asset:'写真',materialMode:'新規撮影必要',action:'投票する'},
  story3:{text:'商品の形を知る',asset:'写真',materialMode:'新規撮影必要',action:'見る'},
@@ -30,6 +33,12 @@ const single=p=>ctx.validateSingle({schema:ctx.SCHEMA,scope:ctx.SINGLE_SCOPE,pla
 
 assert.equal(ten(plan()).length,0);
 assert.equal(single(plan()).id,'v7-official-01');
+for(const count of [499,500]){
+ const proposal=plan();proposal.mainPostBody='本文'.repeat(249)+(count===500?'文。':'文');
+ assert.equal([...proposal.mainPostBody].length,count);
+ if(count===500){assert.equal(ten(proposal).length,0);assert.equal(single(proposal).id,'v7-official-01');}
+ else{proposal.CTA='CTA'.repeat(100);proposal.hook='冒頭'.repeat(100);assert.throws(()=>ten(proposal),/500文字以上/);assert.throws(()=>single(proposal),/500文字以上/);}
+}
 for(const absent of [null,undefined]){
  const optional=plan();if(absent===undefined)delete optional.themeId;else optional.themeId=absent;
  delete optional.themeCategory;
@@ -72,6 +81,7 @@ assert.equal(single(noShots).id,'v7-official-01');
 assert.equal(single(plan()).id,'v7-official-01');
 const concept=fs.readFileSync('three-axis.js','utf8');
 const published=fs.readFileSync('dist/index.html','utf8');
+assert.match(published,/p\.caption=dx\('#captionWork'\)\.value/,'手動本文は文字数制限なしで保存できる');
 const conceptCheck=concept.match(/^function generatedConceptError\(post\).*$/m)?.[0];
 assert.ok(conceptCheck&&published.includes(conceptCheck),'source and published concept validation match');
 assert.ok(concept.includes("sale:null")&&published.includes("sale:null"),'sale brief has no fabricated official parent');

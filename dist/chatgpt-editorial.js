@@ -192,7 +192,7 @@ function validate(data){
   if(p.dayNumber!==expectedDay)throw Error(`${short(p.date)}のDayは${expectedDay}にしてください。`);
   seen.add(p.date);
   validateEditorialPlan(p,{scope:'ten-day'});
-  if(p.format!=='投稿なし'&&[...p.mainPostBody].length<300)throw Error(`${short(p.date)}の本文は300文字以上にしてください。`);
+  if(p.format!=='投稿なし'&&[...p.mainPostBody].length<500)throw Error(`${short(p.date)}の本文は500文字以上にしてください。`);
   for(const [index,story] of [p.story1,p.story2,p.story3,p.story4].entries()){const label=`${p.date}のStory${index+1}`;if(typeof story.asset!=='string'||!story.asset.trim())throw Error(`${label}のassetを確認してください。`);if(!['過去素材使用可','新規撮影必要','まとめ撮り対象'].includes(story.materialMode))throw Error(`${label}のmaterialModeを確認してください。許容値：過去素材使用可／新規撮影必要／まとめ撮り対象。`);if(typeof story.action!=='string'||!story.action.trim())throw Error(`${label}のactionを確認してください。`);}
  }
  for(let date=period.from;date<=period.to;date=dayAdd(date,1))if(!seen.has(date))throw Error(`${short(date)}のStory案がありません。`);
@@ -363,6 +363,7 @@ function validateSingle(data,date){
  if(blocked(date))throw Error('投稿不可日は再提案を確定できません。');
  if(p.dayNumber!=null&&Number(p.dayNumber)!==Number(cycleDay(date).replace(/\D/g,'')))throw Error('Day表示が対象日と一致しません。');
  const {topic,story2Issue:issue}=validateEditorialPlan(p,{scope:SINGLE_SCOPE});
+  if([...p.mainPostBody].length<500)throw Error('新しいAI本文は500文字以上にしてください。本文だけを確認し、内容を具体化して再提案してください。');
  if(issue)throw Error(issue);
  const hasShots=Object.hasOwn(p,'shots');
  const shotIds=hasShots?p.shots.map(shot=>shot.id).filter(id=>id!==undefined):[];
@@ -450,11 +451,11 @@ const editorialShowPost=showPost;showPost=function(id){
 };
 document.head.insertAdjacentHTML('beforeend','<style>.editorial-diff{border-left:3px solid #53695f;background:#f0f2ef;padding:8px 10px;border-radius:6px;white-space:pre-wrap;overflow-wrap:anywhere}.editorial-diff .badge{margin-left:8px}#singleDayEditorial{margin:8px 0 16px}#singleDayWarningEditorial{margin-top:8px}</style>');
 const originalPrompt=prompt;
-prompt=function(scope){return originalPrompt(scope).replace('返答は説明文を付けずJSONだけにしてください。', `本文は300文字以上。文字数の水増しではなく、cian en paclamの元タンナー・作り手として確認できる素材、仕上げ、工程、構造、実際の使用場面を具体的に扱ってください。一般論だけにせず、疑問→実物で確かめる知識→暮らしでの使い道を投稿ごとに自然につないでください。未確認の経験や商品性能は創作しません。保存記録に根拠がないアンケート結果・質問回答・お客様の声は事実として書かず、記録があっても意味を変えません。顧客反応は判断材料であり毎日強制採用しません。\n\nStory1はメインの要約ではなく別の知識。Story2は自由回答なら質問スタンプ、2〜4択ならアンケートかクイズを選び、直近と同じ質問を避けます。Story3はStory1と別の被写体・学びを示し、商品が主役なら商品紹介、例示だけなら非商品として扱います。Story4はStory3の言い換えや単なる「投稿を見て」ではなく、今日のメイン投稿で具体的に何を確かめられるかを示します。撮影指示は各カットに何を・どう撮る・何を伝えるを含め、Feedは写真、Reelは動画に合わせます。完成後に本文・Story1〜4・撮影を再読し、同じ行動・学び・被写体、根拠のない声、回答形式や商品分類の不一致を解消してください。\n\n返答は説明文を付けずJSONだけにしてください。`);};
+prompt=function(scope){return originalPrompt(scope).replace('返答は説明文を付けずJSONだけにしてください。', `本文は500文字以上。文字数の水増しではなく、cian en paclamの元タンナー・作り手として確認できる素材、仕上げ、工程、構造、実際の使用場面を具体的に扱ってください。一般論だけにせず、疑問→実物で確かめる知識→暮らしでの使い道を投稿ごとに自然につないでください。未確認の経験や商品性能は創作しません。保存記録に根拠がないアンケート結果・質問回答・お客様の声は事実として書かず、記録があっても意味を変えません。顧客反応は判断材料であり毎日強制採用しません。\n\nStory1はメインの要約ではなく別の知識。Story2は自由回答なら質問スタンプ、2〜4択ならアンケートかクイズを選び、直近と同じ質問を避けます。Story3はStory1と別の被写体・学びを示し、商品が主役なら商品紹介、例示だけなら非商品として扱います。Story4はStory3の言い換えや単なる「投稿を見て」ではなく、今日のメイン投稿で具体的に何を確かめられるかを示します。撮影指示は各カットに何を・どう撮る・何を伝えるを含め、Feedは写真、Reelは動画に合わせます。完成後に本文・Story1〜4・撮影を再読し、同じ行動・学び・被写体、根拠のない声、回答形式や商品分類の不一致を解消してください。\n\n返答は説明文を付けずJSONだけにしてください。`);};
 const originalSinglePrompt=singlePrompt;
-singlePrompt=function(post){return originalSinglePrompt(post).replace('返答は説明なしの1日分JSONだけ：', `本文は300文字以上で、その日固有の素材・仕上げ・工程・構造・使う場面を具体的に扱い、一般論の水増しにしないでください。保存された記録に根拠のないアンケート結果・お客様の声を創作しないでください。Story1〜4は同じ行動・学び・被写体を繰り返さず、Story2の選択肢と回答方法、Story3の商品分類、Story4の投稿を見る具体的理由を確認してください。Feedは写真、Reelは動画に合う撮影案を考えてください。\n\n返答は説明なしの1日分JSONだけ：`);};
+singlePrompt=function(post){return originalSinglePrompt(post).replace('返答は説明なしの1日分JSONだけ：', `本文は500文字以上で、その日固有の素材・仕上げ・工程・構造・使う場面を具体的に扱い、一般論の水増しにしないでください。保存された記録に根拠のないアンケート結果・お客様の声を創作しないでください。Story1〜4は同じ行動・学び・被写体を繰り返さず、Story2の選択肢と回答方法、Story3の商品分類、Story4の投稿を見る具体的理由を確認してください。Feedは写真、Reelは動画に合う撮影案を考えてください。\n\n返答は説明なしの1日分JSONだけ：`);};
 const contentPrompt=prompt;
-prompt=function(scope){const text=contentPrompt(scope);if(scope!=='ten-day')return text;return text.replace('返答は説明文を付けずJSONだけにしてください。',`各planのshotsにメイン投稿の撮影指示を必ず入れ、各カットに写真／動画・何をどう撮り何を伝えるか・必要カット数・関連商品IDを指定してください。Story1〜4にもassetとmaterialMode（過去素材使用可／新規撮影必要／まとめ撮り対象）とactionを入れ、撮影・素材情報を本文とは別に保持してください。\n\n販売目的の商品候補は monthly.saleStrategy の対象販売日とSKU個別のrestockDateが一致するlineup全件を検討してください。再販日を持たない販売中の商品はproductsにあり、販売日限定の再販候補とは分けて非販売目的の紹介候補として検討してください。lineupの配列順・productsの配列順は推薦順位ではありません。priority / adCandidate は判断材料であり、先頭SKUや同一SKUを繰り返す理由にはなりません。その日のテーマ・顧客価値・販売戦略に合う場合だけ選び、選んだ理由をangleや本文に具体化してください。Storyの商品も含め、同じSKUや同じ商品セットを再利用する場合は各日で異なる企画上の必要性を明確にしてください。商品なしの日も認め、均等ローテーションにはしないでください。\n\n次の順序で編集してください。1. 過去の実投稿・実施済みStory・7日後評価・お客様の声を、予定投稿とは区別して読む。直近10投稿、必要な場合のみ最大20投稿の露出も確認する。2. 投稿可能な全日を一度に仮作成し、1日ずつ確定しない。3. 日付順の一覧で、親テーマ・派生テーマ・問い・結論・顧客価値・本文構造・被写体・撮影・CTAを全日比較する。4. 同じ企画や定型本文、正式テーマ番号順の消費があれば別の学びへ差し替える。5. Story1〜4を全日再比較し、特にStory3の発見とStory4の投稿を見る理由を分け、クイズの答えをStory4へ押し込まない。6. 月間販売予定、priority、広告候補、直近露出を見てSKU・アイテム・カテゴリ・色・財布・mini wallet・黒の偏りを再確認する。同一SKU・同一商品セットや特定カラーの集中があれば、別カテゴリを含む候補と比較し、企画理由が弱い日は差し替える。商品を出さない日も認め、均等ローテーションはしない。7. 問題が残る間はJSONを返さず再編集し、すべて解消してからJSONだけを出力する。\n\n本文は全日300文字以上。クイズには問題文・選択肢・正解・同じStory内での回答場所を含め、kind・text・options・correctAnswer・actionを一致させてください。INDUSTRY #66〜80は出典を確認し、各planのresearchSourcesに出典名とURL等を入れてください。出典のない事実を完成原稿として書かないでください。BUSINESSでもcustomerValueを具体化し、CTAなしの日も認めます。\n\n返答は説明文を付けずJSONだけにしてください。`);};
+prompt=function(scope){const text=contentPrompt(scope);if(scope!=='ten-day')return text;return text.replace('返答は説明文を付けずJSONだけにしてください。',`各planのshotsにメイン投稿の撮影指示を必ず入れ、各カットに写真／動画・何をどう撮り何を伝えるか・必要カット数・関連商品IDを指定してください。Story1〜4にもassetとmaterialMode（過去素材使用可／新規撮影必要／まとめ撮り対象）とactionを入れ、撮影・素材情報を本文とは別に保持してください。\n\n販売目的の商品候補は monthly.saleStrategy の対象販売日とSKU個別のrestockDateが一致するlineup全件を検討してください。再販日を持たない販売中の商品はproductsにあり、販売日限定の再販候補とは分けて非販売目的の紹介候補として検討してください。lineupの配列順・productsの配列順は推薦順位ではありません。priority / adCandidate は判断材料であり、先頭SKUや同一SKUを繰り返す理由にはなりません。その日のテーマ・顧客価値・販売戦略に合う場合だけ選び、選んだ理由をangleや本文に具体化してください。Storyの商品も含め、同じSKUや同じ商品セットを再利用する場合は各日で異なる企画上の必要性を明確にしてください。商品なしの日も認め、均等ローテーションにはしないでください。\n\n次の順序で編集してください。1. 過去の実投稿・実施済みStory・7日後評価・お客様の声を、予定投稿とは区別して読む。直近10投稿、必要な場合のみ最大20投稿の露出も確認する。2. 投稿可能な全日を一度に仮作成し、1日ずつ確定しない。3. 日付順の一覧で、親テーマ・派生テーマ・問い・結論・顧客価値・本文構造・被写体・撮影・CTAを全日比較する。4. 同じ企画や定型本文、正式テーマ番号順の消費があれば別の学びへ差し替える。5. Story1〜4を全日再比較し、特にStory3の発見とStory4の投稿を見る理由を分け、クイズの答えをStory4へ押し込まない。6. 月間販売予定、priority、広告候補、直近露出を見てSKU・アイテム・カテゴリ・色・財布・mini wallet・黒の偏りを再確認する。同一SKU・同一商品セットや特定カラーの集中があれば、別カテゴリを含む候補と比較し、企画理由が弱い日は差し替える。商品を出さない日も認め、均等ローテーションはしない。7. 問題が残る間はJSONを返さず再編集し、すべて解消してからJSONだけを出力する。\n\n本文は全日500文字以上。クイズには問題文・選択肢・正解・同じStory内での回答場所を含め、kind・text・options・correctAnswer・actionを一致させてください。新正式100テーマの番号を旧INDUSTRY分類と結び付けず、最新資料が必要な主張には出典を確認し、各planのresearchSourcesに出典名とURL等を入れてください。出典のない事実を完成原稿として書かないでください。BUSINESSでもcustomerValueを具体化し、CTAなしの日も認めます。\n\n返答は説明文を付けずJSONだけにしてください。`);};
 function nextEditorialContext(){
  const block=salesCycleBlock();if(!block)throw Error('次の期間を計算できません。販売日を確認してください。');
  const from=block.nextFrom,to=block.nextTo,data=context('ten-day'),history=postHistories(from,to,planContext(from).recentLimit);
@@ -569,7 +570,7 @@ const promptBeforeDailyStories=prompt;
 prompt=function(scope){if(scope!=='ten-day')return promptBeforeDailyStories(scope);return promptBeforeDailyStories(scope)
  .replace('投稿不可日はplansへ含めず、投稿可能日はすべてplansに含めてください。','投稿不可日も含む10日間の全日付をplansへ含め、Feed／Reelがない日はformatを「投稿なし」にしてください。全日でStory1〜4を提案します。')
  .replace('各planのshotsにメイン投稿の撮影指示を必ず入れ','Feed／Reelがあるplanだけshotsにメイン投稿の撮影指示を必ず入れ')
- .replace('本文は全日300文字以上。','Feed／Reelがある日の本文は300文字以上。')
+ .replace('本文は全日500文字以上。','Feed／Reelがある日の本文は500文字以上。')
  .replace('Story4は今日のFeed/Reelで具体的に確認できることへの導線','Story4はFeed／Reelがある日はその投稿への具体的な導線、ない日は商品・販売日・保存など自然な次の行動')
  .replace('Story4：今日のメイン投稿への自然な導線','Story4：その日の内容に合う自然な次の行動')
  .replace('Story4はその日のメイン投稿を見る独立した具体的な導線','Story4は投稿がある日はその投稿へ、投稿がない日は商品・販売日・保存などへの具体的な導線')

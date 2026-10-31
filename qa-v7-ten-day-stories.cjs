@@ -9,7 +9,16 @@ const dates=Array.from({length:10},(_,index)=>{const day=new Date(start+'T00:00:
 const makeStory=(date,slot)=>({text:`${date} の Story ${slot} を見る理由と具体的な案内です`,asset:`${date} の写真 ${slot}`,action:`${date} の次の行動 ${slot}`,materialMode:'過去素材使用可',skuIds:[],...(slot===2?{kind:'会話'}:{})});
 const makePlan=(date,index)=>({date,dayNumber:index+1,format:'投稿なし',...Object.fromEntries([1,2,3,4].map(slot=>['story'+slot,makeStory(date,slot)]))});
 const plans=dates.map(makePlan);
-plans[2]={...plans[2],format:'Feed',primaryPurpose:'CUSTOMER_VALUE',customerValue:'暮らしの使い方',themeId:null,mainTopic:'架空の投稿',mainPostBody:'架空の投稿本文。'.repeat(40),products:[],shots:[{media:'写真',what:'テスト用の手元を撮る',count:1,skuIds:[]}],CTA:'商品を見る'};
+const feedBody=[
+ 'この日は、革小物を毎日の持ち物にどう合わせるかを考えます。まず机の上に普段持ち歩くカード、鍵、紙類を並べ、何を一緒に持ちたいのかを目で確認します。',
+ '最初の写真は小物の外側を手元と同じ画面に入れて撮ります。次の写真では開いた状態を見せ、収納部の位置と出し入れする向きを確かめます。実際に入る量は商品の仕様と実物を確認し、写真だけで断定しません。',
+ '使う場面は、出かける前に持ち物をしまうときと、外出先で必要な物を取り出すときに分けます。同じ形でも、よく使うものをどこへ入れるかによって感じ方は変わります。',
+ '革の色や表情を比べる場合は、光の条件と背景をそろえます。暗い写真と明るい写真を並べて素材の差だと決めつけず、確認できる範囲を丁寧に伝えます。',
+ '購入前には、今使っている小物のどこに困っているのかを書き出すと選びやすくなります。収納が足りないのか、大きさが合わないのか、手に持ったときの動きが気になるのかを分けてみてください。',
+ '商品ページでは素材、寸法、販売予定を確認できます。分からない点は質問として残し、実物で確かめてから答えます。今日の写真が、自分に合う使い方を考えるきっかけになれば幸いです。'
+].join('\n\n');
+assert.ok([...feedBody].length>=500,'Feedあり日の架空AI本文は500文字以上');
+plans[2]={...plans[2],format:'Feed',primaryPurpose:'CUSTOMER_VALUE',customerValue:'暮らしの使い方',themeId:null,mainTopic:'架空の投稿',mainPostBody:feedBody,products:[],shots:[{media:'写真',what:'テスト用の手元を撮る',count:1,skuIds:[]}],CTA:'商品を見る'};
 const ctx={V7StoryState:stateApi,demo:{posts:[],storyDays:[],reactions:[],shotDone:{},records:[],salesResults:{}},structuredClone,OFFICIAL_TOPICS:[],V7_OFFICIAL_TOPICS:[],ALL_OFFICIAL_TOPICS:[],STORY_ROLES:['毎日見る理由','会話','販売SKU補完','次の行動'],SCHEMA:'qa',validAxes:['CUSTOMER_VALUE','INSTAGRAM_GROWTH','BUSINESS'],MOCK_KEY:'qa',displayedPeriod:'current',newId:(()=>{let id=0;return ()=>`qa-story-${++id}`;})(),short:value=>value,html:String,sku:()=>null,skuLabel:value=>value,
   blocked:()=>false,dayDiff:(to,from)=>Math.round((Date.parse(to)-Date.parse(from))/86400000),dayAdd:(date,n)=>{const day=new Date(date+'T00:00:00Z');day.setUTCDate(day.getUTCDate()+n);return day.toISOString().slice(0,10);},
   importPeriod:()=>({from:dates[0],to:dates[9],dayFrom:1}),warnings:()=>[],qualityAudit:()=>({issues:[],exposure:{issues:[]}}),validate:()=>[],salesCycleBlock:()=>({nextFrom:dates[0]}),persist(){},finishPreview(){},refreshWork(){},toast(){},

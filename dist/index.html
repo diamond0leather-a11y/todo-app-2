@@ -1155,7 +1155,7 @@ function newStoryIdentity(post,story){
 function dayAdd(d,n){const t=new Date(d+'T12:00:00');t.setDate(t.getDate()+n);return localDate(t);}
 function dayDiff(a,b){return Math.round((new Date(a+'T12:00:00')-new Date(b+'T12:00:00'))/86400000);}
 function short(d){return d?Number(d.slice(5,7))+'/'+Number(d.slice(8,10)):'未設定';}
-const TODAY=jstDate(new Date());
+let TODAY=jstDate(new Date());
 const formats={Reel:'リール',Carousel:'複数枚投稿',Feed:'写真1枚'};
 const longBase=buildCaption;
 function richCaption(product,theme,variant=''){const initial=longBase(product,theme,1);const sections=[
@@ -1358,7 +1358,7 @@ const BRIEFS=[
 ];
 const BRIEF_PARENT_IDS={pattern:'official-64',light:'official-14',aging:'official-37',care:'official-43',choose:'official-92',sale:null,sound:'official-64'};
 for(const brief of BRIEFS){const parent=ALL_OFFICIAL_TOPICS.find(topic=>topic.id===BRIEF_PARENT_IDS[brief.id]);if(parent){brief.parentId=parent.id;brief.group=parent.group;}}
-function generatedConceptError(post){const parent=ALL_OFFICIAL_TOPICS.find(topic=>topic.id===post?.parentId);if(post?.parentId!=null&&!parent)return '親テーマIDが正式100テーマにありません。';if(typeof post?.theme!=='string'||!post.theme.trim())return '投稿テーマがありません。';if(!Object.hasOwn(AXES,post.primaryAxis))return '主目的が正式3軸に含まれていません。';if(parent&&post.topicGroup!==parent.group)return '親テーマと分類が一致していません。';if(parent?.researchRequired&&post.researchRequired!==true)return 'INDUSTRY 66〜80は要リサーチです。';return '';}
+function generatedConceptError(post){const parent=ALL_OFFICIAL_TOPICS.find(topic=>topic.id===post?.parentId);if(post?.parentId!=null&&!parent)return '親テーマIDが正式100テーマにありません。';if(typeof post?.theme!=='string'||!post.theme.trim())return '投稿テーマがありません。';if(!Object.hasOwn(AXES,post.primaryAxis))return '主目的が正式3軸に含まれていません。';if(parent&&post.topicGroup!==parent.group)return '親テーマと分類が一致していません。';if(parent?.researchRequired&&post.researchRequired!==true)return '出典確認が必要なテーマです。';return '';}
 function topicLabel(p){const t=ALL_OFFICIAL_TOPICS.find(t=>t.id===p.parentId);return t?`${t.id.startsWith('official-')?'旧テーマ｜':''}${t.group} #${String(t.number).padStart(2,'0')}｜${t.title||'原文未確認'}`:`正式テーマなし｜${p.theme||p.derivedTheme||'テーマ未設定'}`;}
 function activeCatalogSku(s){const product=item(s.itemId);return !s.deleted&&product&&!product.deleted&&demo.categories.some(c=>c.id===product.categoryId&&!c.deleted);}
 function saleRestockLineup(date){if(!date)return [];const month=Object.values(demo.months).find(m=>m.date===date),seen=new Set();return demo.skus.filter(s=>activeCatalogSku(s)&&s.restockDate===date&&s.status==='restock'&&!seen.has(s.id)&&seen.add(s.id)).map(s=>{const saved=month?.lineup?.find(l=>l.skuId===s.id);return {skuId:s.id,saleKind:saved?.saleKind||'再販',priority:!!(saved?.priority??s.priority),adCandidate:!!(saved?.adCandidate??s.adCandidate)};});}
@@ -1416,7 +1416,7 @@ function topicTemplate(topic,axis,index,attempt){const base=BRIEFS.find(b=>b.gro
 function normalizeTheme(text){return String(text||'').normalize('NFKC').toLowerCase().replace(/[\s　・｜「」『』、。？！?!]/g,'');}
 function themeWords(text){const s=normalizeTheme(text);return new Set(Array.from({length:Math.max(0,s.length-1)},(_,i)=>s.slice(i,i+2)));}
 function nearTheme(a,b){const na=normalizeTheme(a),nb=normalizeTheme(b);if(!na||!nb)return false;if(na===nb)return true;const wa=themeWords(na),wb=themeWords(nb),same=[...wa].filter(x=>wb.has(x)).length;return same/Math.max(1,Math.min(wa.size,wb.size))>=.72;}
-function completeGeneratedCaption(post){if([...String(post.caption||'')].length>=300)return;const products=post.skuIds.length?post.skuIds.map(skuLabel).join('、'):'今回撮影する革や道具';const focus={LEATHER:'表面の模様だけでなく、厚みや柔らかさ、光を受けたときの表情まで見比べると、革ごとの個性が分かりやすくなります。',ANIMAL:'動物の種類だけで決めつけず、部位・なめし・仕上げまで確認することが、革を正しく知る手がかりになります。',AGING:'変化の速さや現れ方は、使う頻度、触れ方、保管環境でも異なります。誰かと同じ色にするのではなく、自分の時間として楽しんでください。',CARE:'まず素材と仕上げを確認し、目立たない場所で少量から試すことが大切です。迷う場合は、自己判断で進めず写真と商品名を添えてご相談ください。',CRAFT:'完成品だけでなく、型紙・裁断・縫製・仕上げのどこで形や使い心地が決まるのかを、手元の動きと一緒にお伝えします。',INDUSTRY:'未確認の情報は断定せず、出典と確認日を確かめたうえで、暮らしや革選びにどう関係するかを整理します。',FASHION:'流行だけを追うのではなく、いつもの服や持ち物に合わせたときの色・大きさ・素材の見え方を考えます。',CUSTOMER:'いただいた質問や使う場面を出発点に、選ぶ前の迷いと使い始めてからの困りごとを一つずつ整理します。'}[post.topicGroup]||'実物を見ながら、暮らしの中で役立つポイントを具体的に確かめます。';post.caption=[post.caption,`今回見るのは「${post.theme}」です。${focus}`,`${products}を例に、見た目だけでは分かりにくい部分も写真や工程で確かめます。使う場面を思い浮かべながら、今持っているものとの違い、手に取るときに確認したい点、長く使うために知っておきたいことを順番にご紹介します。`,`作り手として、形や素材を選んだ理由だけでなく、できることと注意したいことも同じように伝えたいと考えています。気になる点や、ご自身の使い方で迷っていることがあれば、コメントやDMで教えてください。次の投稿やご案内を、実際のお声に沿って分かりやすくする参考にします。`,post.cta].filter(Boolean).join('\n\n');}
+function completeGeneratedCaption(post){if([...String(post.caption||'')].length>=500)return;const products=post.skuIds.length?post.skuIds.map(skuLabel).join('、'):'今回撮影する革や道具';const focus={LEATHER:'表面の模様だけでなく、厚みや柔らかさ、光を受けたときの表情まで見比べると、革ごとの個性が分かりやすくなります。',ANIMAL:'動物の種類だけで決めつけず、部位・なめし・仕上げまで確認することが、革を正しく知る手がかりになります。',AGING:'変化の速さや現れ方は、使う頻度、触れ方、保管環境でも異なります。誰かと同じ色にするのではなく、自分の時間として楽しんでください。',CARE:'まず素材と仕上げを確認し、目立たない場所で少量から試すことが大切です。迷う場合は、自己判断で進めず写真と商品名を添えてご相談ください。',CRAFT:'完成品だけでなく、型紙・裁断・縫製・仕上げのどこで形や使い心地が決まるのかを、手元の動きと一緒にお伝えします。',INDUSTRY:'未確認の情報は断定せず、出典と確認日を確かめたうえで、暮らしや革選びにどう関係するかを整理します。',FASHION:'流行だけを追うのではなく、いつもの服や持ち物に合わせたときの色・大きさ・素材の見え方を考えます。',CUSTOMER:'いただいた質問や使う場面を出発点に、選ぶ前の迷いと使い始めてからの困りごとを一つずつ整理します。'}[post.topicGroup]||'実物を見ながら、暮らしの中で役立つポイントを具体的に確かめます。';post.caption=[post.caption,`今回見るのは「${post.theme}」です。${focus}`,`${products}を例に、見た目だけでは分かりにくい部分も写真や工程で確かめます。使う場面を思い浮かべながら、今持っているものとの違い、手に取るときに確認したい点、長く使うために知っておきたいことを順番にご紹介します。`,`作り手として、形や素材を選んだ理由だけでなく、できることと注意したいことも同じように伝えたいと考えています。気になる点や、ご自身の使い方で迷っていることがあれば、コメントやDMで教えてください。次の投稿やご案内を、実際のお声に沿って分かりやすくする参考にします。`,post.cta].filter(Boolean).join('\n\n');}
 createConcept=function(date,index=0,forced,attempt=0){if(forced)return briefConcept(date,index,forced);const c=planContext(date),preferred=chooseAxis(c),axes=[preferred,...Object.keys(AXES).filter(axis=>axis!==preferred)],axis=axes[attempt%axes.length],topic=topicCandidates(axis,c,date,attempt)[attempt%12],template=topicTemplate(topic,axis,index,attempt);template.saleFocused=axis==='BUSINESS';BRIEFS.push(template);let post;try{post=briefConcept(date,index,template.id);}finally{BRIEFS.pop();}post.briefId=template.id;post.themeId=topic.id;post.primaryAxis=axis;post.parentId=topic.id;post.topicGroup=topic.group;post.derivedTheme=template.title;post.theme=template.title;post.takeaway=template.message;post.researchRequired=!!topic.researchRequired;post.skuIds=conceptSubjects(template,c,attempt);post.subjects=post.skuIds.length?post.skuIds.map(skuLabel).join(' ＋ '):post.subjects;post.cta=safeConceptCta(axis,post.skuIds,index+attempt,date);post.planningReason+=' 正式100テーマから未使用・直近重複・販売状況を確認して選定。';completeGeneratedCaption(post);const invalid=generatedConceptError(post);if(invalid)throw Error('投稿案を追加できません：'+invalid);return post;};
 function planConflict(post,previous,block){const sale=salesContext(post.date),nearSale=sale.until!==null&&sale.until<=3,priorityIds=post.skuIds.filter(id=>sale.next?.lineup.some(l=>l.skuId===id&&l.priority)),priority=priorityIds.length>0,blockSale=salesContext(blockStartFor(post.date)),eventReason=demo.events.some(e=>e.start<=post.date&&e.end>=post.date),categoryException=nearSale||eventReason;if(block.some(p=>post.parentId!=null&&p.parentId===post.parentId)&&!nearSale)return 'parent';if(block.some(p=>nearTheme(p.derivedTheme||p.theme,post.derivedTheme||post.theme)))return 'theme';if(block.filter(p=>p.topicGroup===post.topicGroup).length>=3&&!categoryException)return 'category';const priorityLimit=blockSale.until!==null&&blockSale.until<=3?5:blockSale.until!==null&&blockSale.until<=7&&priorityIds.some(id=>sale.next?.lineup.find(l=>l.skuId===id)?.saleKind==='新発売')?4:3;if(priorityIds.some(id=>block.filter(p=>p.skuIds.includes(id)).length>=priorityLimit))return 'priority';if(previous){const sameSku=post.skuIds.some(id=>previous.skuIds.includes(id)),sameItem=post.skuIds.some(id=>previous.skuIds.some(x=>sku(x)?.itemId===sku(id)?.itemId)),sameColor=post.skuIds.some(id=>previous.skuIds.some(x=>sku(x)?.name&&sku(x)?.name===sku(id)?.name)),sameMaterial=post.skuIds.some(id=>previous.skuIds.some(x=>sku(x)?.material&&sku(x)?.material===sku(id)?.material)),black=post.skuIds.some(id=>/black|noir|nero/i.test(sku(id)?.name||''))&&previous.skuIds.some(id=>/black|noir|nero/i.test(sku(id)?.name||''));if(sameSku||black||((sameItem||sameColor||sameMaterial)&&!priority))return 'product';if(previous.topicGroup===post.topicGroup&&block.at(-2)?.topicGroup===post.topicGroup&&!categoryException)return 'category-sequence';if(previous.format===post.format&&block.at(-2)?.format===post.format)return 'format';if(previous.primaryAxis===post.primaryAxis&&block.at(-2)?.primaryAxis===post.primaryAxis&&!nearSale)return 'axis';if(normalizeTheme(previous.cta)===normalizeTheme(post.cta))return 'cta';if(previous.briefId===post.briefId||previous.role===post.role)return 'brief';}return '';}
 function generatePlanDates(dates){const created=[];for(let i=0;i<dates.length;i++){const date=dates[i];if(demo.posts.some(p=>p.date===date&&!p.deleted)||blocked(date))continue;const block=demo.posts.filter(p=>!p.deleted&&dates.includes(p.date)&&p.date<date).sort((a,b)=>a.date.localeCompare(b.date));let post,attempt=0;do{post=createConcept(date,i,null,attempt++);}while(planConflict(post,block.at(-1),block)&&attempt<25);if(planConflict(post,block.at(-1),block))throw Error(short(date)+'の重複を解消できませんでした。');demo.posts.push(post);created.push(post);}return created;}
@@ -1863,6 +1863,85 @@ document.head.insertAdjacentHTML('beforeend','<style>#dayDetail .v7-post-block{m
 <script src="./story-replacement-safety.js"></script>
 <script src="./story1-alternatives.js"></script>
 <script src="./v7-story-ui.js?story-ai=20261028"></script>
+<script>
+// v7.1: read-only daily execution view. Existing post, Story and shot editors remain the only edit paths.
+dx('main').insertAdjacentHTML('beforeend',`<section class="view execution-view" id="view-execution"><div class="section-head"><div><div class="section-kicker">TODAY</div><h2>今日の実行内容</h2></div></div><p id="executionDate" class="muted"></p><div id="executionContent"></div><button type="button" class="ghost full" data-nav="home">HOMEへ戻る</button></section>`);
+function executionLine(label,value,className=''){
+  return typeof value==='string'&&value.trim()?`<div class="execution-line"><strong>${html(label)}</strong><p class="${className}">${html(value)}</p></div>`:'';
+}
+function executionCaption(value){
+  if(typeof value!=='string'||!value.trim())return '';
+  const long=value.length>120||value.split('\n').length>4;
+  return `<div class="execution-line execution-caption"><strong>投稿本文</strong><p class="execution-copy${long?' is-collapsed':''}" data-execution-caption>${html(value)}</p><div class="execution-caption-actions">${long?'<button type="button" class="ghost" data-execution-caption-toggle aria-expanded="false">全文を見る</button>':''}<button type="button" class="secondary" data-execution-caption-copy>本文をコピー</button></div><p class="tiny" data-execution-copy-status role="status" aria-live="polite"></p></div>`;
+}
+function renderExecution(){
+  const date=TODAY,posts=demo.posts.filter(post=>post.date===date&&!post.paused&&!post.deleted),post=posts[0];
+  dx('#executionDate').textContent=date+'（日本時間）';
+  const postSection=post?`<article class="card"><h3>今日のFeed / Reel</h3>
+    ${executionLine('テーマ',post.derivedTheme||post.theme||'')}${executionLine('伝えること',post.takeaway||'')}
+    ${post.skuIds?.length?executionLine('対象商品・SKU',post.skuIds.map(skuLabel).join(' ＋ ')):''}
+    ${executionLine('投稿形式',formats[post.format]||post.format||'')}${executionLine('予定時刻',post.plannedTime||'')}
+    ${executionLine('冒頭',post.hook||'','execution-copy')}${executionCaption(post.caption)}${executionLine('CTA',post.cta||'','execution-copy')}
+    <div class="execution-actions"><button type="button" class="secondary" data-work-post="${html(post.id)}">投稿詳細で編集</button>${posts.length>1?`<button type="button" class="ghost" data-execution-more>ほか${posts.length-1}件を見る</button>`:''}</div>
+  </article>`:'<article class="card"><h3>今日のFeed / Reel</h3><p>今日の投稿予定はありません。</p></article>';
+  const shots=[...new Map(posts.flatMap(item=>(item.shots||[]).map((shot,index)=>[shot.id||shot.signature||item.id+'|'+index,shot]))).values()];
+  const shootSection=`<article class="card"><h3>今日の撮影</h3><p>${shots.length}カット中${shots.filter(shotDoneFor).length}カット撮影済み</p><button type="button" class="secondary" data-nav="shoot">撮影画面を見る</button></article>`;
+  const entries=V7StoryState.entriesOnDate(demo,date);
+  const storySection=[1,2,3,4].map(slot=>{
+    const entry=entries.find(value=>value.slot===slot),story=entry?.story;
+    const body=story?`${executionLine('テーマ・内容',story.theme||'')}${executionLine('文章',story.text||'','execution-copy')}
+      ${executionLine('使用素材',story.asset||'','execution-copy')}${executionLine('参加方法',story.kind&&story.kind!=='なし'?story.kind:'')}
+      ${Array.isArray(story.options)&&story.options.length?executionLine('選択肢',story.options.join('／')):''}${executionLine('答え',story.correctAnswer||'')}
+      ${slot===3&&story.skuIds?.length?executionLine('対象SKU',story.skuIds.map(skuLabel).join(' ＋ ')):''}
+      ${executionLine(slot===4?'次の行動・CTA':'見た方への案内',story.action||'','execution-copy')}
+      <button type="button" class="ghost" data-v7-story-edit="${html(entry.post?.id||story.id)}|${entry.index}">Storyを編集</button>`:'';
+    return `<article class="card execution-story"><h3>Story ${slot}｜${html(STORY_ROLES[slot-1])}</h3>${body}</article>`;
+  }).join('');
+  dx('#executionContent').innerHTML=postSection+shootSection+storySection;
+}
+const executionHomeRender=renderHome;
+renderHome=function(){executionHomeRender();dx('#homeTodayContent')?.insertAdjacentHTML('beforeend','<button type="button" class="primary full execution-entry" data-nav="execution">今日やることを見る</button>');};
+if(dx('.view.active')?.id==='view-home')renderHome();
+const executionRefresh=refreshWork;
+refreshWork=function(){if(dx('.view.active')?.id==='view-execution')renderExecution();else executionRefresh();};
+document.addEventListener('click',event=>{if(event.target.closest('[data-execution-more]'))openMonthDate(TODAY);});
+document.addEventListener('click',async event=>{
+  const toggle=event.target.closest('[data-execution-caption-toggle]');
+  if(toggle){const caption=toggle.closest('.execution-caption')?.querySelector('[data-execution-caption]');if(!caption)return;const expanded=toggle.getAttribute('aria-expanded')!=='true';caption.classList.toggle('is-collapsed',!expanded);toggle.setAttribute('aria-expanded',String(expanded));toggle.textContent=expanded?'閉じる':'全文を見る';return;}
+  const copy=event.target.closest('[data-execution-caption-copy]');
+  if(!copy)return;
+  const status=copy.closest('.execution-caption')?.querySelector('[data-execution-copy-status]');
+  const caption=demo.posts.find(post=>post.date===TODAY&&!post.paused&&!post.deleted)?.caption;
+  if(!status||typeof caption!=='string'||!caption.trim())return;
+  try{await navigator.clipboard.writeText(caption);status.textContent='コピーしました';}
+  catch{status.textContent='コピーできませんでした。ブラウザの権限を確認してください。';}
+});
+let executionDateTimer;
+function checkExecutionDate(){
+  const current=jstDate(new Date());
+  if(current!==TODAY){TODAY=current;if(dx('.view.active')?.id==='view-home')renderHome();else if(dx('.view.active')?.id==='view-execution')renderExecution();}
+  clearTimeout(executionDateTimer);
+  const next=new Date(dayAdd(current,1)+'T00:00:00+09:00').getTime();
+  executionDateTimer=setTimeout(checkExecutionDate,Math.max(100,Math.min(2147483647,next-Date.now()+20)));
+}
+document.addEventListener('visibilitychange',()=>{if(!document.hidden)checkExecutionDate();});
+window.addEventListener('focus',checkExecutionDate);
+checkExecutionDate();
+</script>
+<style>
+.execution-view .card{min-width:0;margin-bottom:12px;overflow-wrap:anywhere}
+.execution-view .card h3{margin:0 0 12px}
+.execution-line{margin:12px 0;min-width:0}
+.execution-line strong{display:block;font-size:13px;color:#555f51}
+.execution-line p{margin:4px 0 0;line-height:1.65;overflow-wrap:anywhere}
+.execution-copy{white-space:pre-wrap}
+.execution-caption .execution-copy.is-collapsed{display:-webkit-box;-webkit-box-orient:vertical;-webkit-line-clamp:4;line-clamp:4;overflow:hidden}
+.execution-caption-actions{display:flex;gap:8px;flex-wrap:wrap;margin-top:8px}
+.execution-caption-actions button{flex:1 1 130px}
+.execution-actions{display:flex;gap:8px;flex-wrap:wrap}
+.execution-actions button,.execution-view .card button{min-height:44px;max-width:100%;white-space:normal}
+#homeTodayContent .execution-entry{margin-top:10px}
+</style>
 <script>
 // Keep only these four monthly sections open across month-screen redraws.
 const monthFoldLabels={events:'登録したイベント・広告',candidates:'優先商品・広告候補',history:'販売履歴・次回予定',results:'販売結果の入力・修正'};

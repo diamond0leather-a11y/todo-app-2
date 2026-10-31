@@ -22,7 +22,16 @@ vm.runInContext(between('function validateEditorialShots(', 'function validate(d
 vm.runInContext(between('function validateSingle(data,date)', 'function planComparison('),ctx);
 vm.runInContext(between('function showSinglePreview()', 'function openSingleImport('),ctx);
 
-const plan = () => ({date:post.date,format:'Feed',primaryPurpose:'BUSINESS',themeId:'v7-official-01',themeCategory:'革を知る',mainTopic:'新しいテーマ',customerValue:'価値',mainPostBody:'新しい本文',products:['sku-a'],CTA:null,
+const proposalBody=[
+ '今日は革小物の外側と内側を、同じ明るさの写真で順番に見比べます。形だけを見ると似ていても、開いたときに指が触れる場所や、カードを出し入れする向きには違いがあります。',
+ '最初の写真では全体の大きさを手元と一緒に示します。次の写真では開口部と収納部を寄りで撮り、どこに何を入れられるかを確認します。写真で判断できない厚みは断定せず、実物で確かめる項目として残します。',
+ '使う場面を考えるときは、朝に持ち物を入れる順番と、外出先で取り出す順番を分けてみてください。毎日使うものほど、小さな動作の違いが自分に合う形を選ぶ手がかりになります。',
+ '素材については登録された名称を確認し、手触りや経年変化を写真だけで決めつけません。同じ色に見えても、光の向きや仕上げによって印象は変わります。比較するときは背景と撮影条件をそろえます。',
+ '購入を考えている方は、今使っている財布に入れているカードや紙類を一度並べてみてください。必要な収納を確かめてから形を見ると、見た目の好みと使いやすさの両方を落ち着いて比べられます。',
+ '気になる箇所があれば、商品ページの仕様を確認したうえで質問してください。確認できたことと、まだ実物で確かめる必要があることを分けてお答えします。'
+].join('\n\n');
+assert.ok([...proposalBody].length>=500,'新規AI案の架空本文は500文字以上');
+const plan = () => ({date:post.date,format:'Feed',primaryPurpose:'BUSINESS',themeId:'v7-official-01',themeCategory:'革を知る',mainTopic:'新しいテーマ',customerValue:'価値',mainPostBody:proposalBody,products:['sku-a'],CTA:null,
   story1:{text:'Story1',materialMode:'過去素材使用可'},story2:{text:'Story2',materialMode:'過去素材使用可'},story3:{text:'Story3',materialMode:'過去素材使用可'},story4:{text:'Story4',materialMode:'過去素材使用可'}});
 const preview = input => {ctx.singlePreview={postId:post.id,before:{},after:input,revision:post.revision};ctx.showSinglePreview();ctx.save();};
 
@@ -104,7 +113,7 @@ vm.createContext(ten);
 vm.runInContext('const newId=()=>"qa-ten-story-"+(++globalThis.storyIdCounter);globalThis.storyIdCounter=0;'+page.slice(page.indexOf('function storyDate('),page.indexOf('function dayAdd(')),ten);
 vm.runInContext(between('function editorialPostForDate(', 'function validateEditorialShots('),ten);
 vm.runInContext(between('async function savePreview(target)', 'function finishPreview('),ten);
-const tenPlan={date:imported.date,format:'Feed',primaryPurpose:'BUSINESS',themeId:null,mainTopic:'次回販売',customerValue:'確認できる',products:[],mainPostBody:'本文',CTA:'',shots:[{media:'写真',what:'確定カット',count:1,skuIds:[]}],
+const tenPlan={date:imported.date,format:'Feed',primaryPurpose:'BUSINESS',themeId:null,mainTopic:'次回販売',customerValue:'確認できる',products:[],mainPostBody:proposalBody,CTA:'',shots:[{media:'写真',what:'確定カット',count:1,skuIds:[]}],
  story1:{text:'1'},story2:{text:'2'},story3:{text:'3'},story4:{text:'4'}};
 ten.savePreview({data:{plans:[tenPlan]},period:{from:'2026-10-05',to:'2026-10-14'},revisions:{'2026-10-05':{id:imported.id,revision:imported.revision}},storySnapshot:{'2026-10-05':[[],[],[],[]]},approvals:{'2026-10-05':{v7Selection:true,createPost:false,meta:false,caption:false,cta:false,products:false,shots:true,stories:[]}},legacyChoices:{},exposureConfirmed:true}).then(()=>{
   const saved=ten.demo.posts[0];

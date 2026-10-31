@@ -5,7 +5,8 @@ const vm = require('node:vm');
 const cases = [
   {date:'2026-09-24', format:'Reel', topicGroup:'CARE', parentId:'official-45', theme:'革の種類によってケア方法は違う', primaryAxis:'CUSTOMER_VALUE', skuIds:[]},
   {date:'2026-09-25', format:'Feed', topicGroup:'LEATHER', parentId:'official-14', theme:'黒い革の表情を比べる', primaryAxis:'INSTAGRAM_GROWTH', skuIds:[]},
-  {date:'2026-09-26', format:'Reel', topicGroup:'CUSTOMER', parentId:'official-99', theme:'革小物を選ぶときの疑問', primaryAxis:'BUSINESS', skuIds:['sku-test']}
+  {date:'2026-09-26', format:'Reel', topicGroup:'CUSTOMER', parentId:'official-99', theme:'革小物を選ぶときの疑問', primaryAxis:'BUSINESS', skuIds:['sku-test']},
+  {date:'2026-09-27', format:'Feed', topicGroup:'商品を知る', parentId:'v7-official-11', theme:'商品の形と使う場面を知る', primaryAxis:'CUSTOMER_VALUE', skuIds:['sku-test']}
 ];
 const oldShootTexts=['現在使われている革小物と、これから試したい形・素材見本を横に並べる','手持ち・バッグ収納・机上の三場面で、今後も必要になる使い方を撮る','革の表情、修理できる箇所、交換しやすい部位へ順に寄り、長く残せる作りを示す','11.08 21:00 NEW & RESTOCKと入れたラインナップ一覧の写真','DÉPLIÉと再販予定商品の一部を並べ、質問スタンプ用の余白を残した写真','DÉPLIÉ / horse と DÉPLIÉ / emboss dark brown を並べ、外形とL字ファスナーが分かる写真','今日のFeedの1枚目またはラインナップ全体が分かる写真'];
 const lineupPost={id:'oct-11',date:'2026-10-11',format:'Feed',skuIds:[],shots:oldShootTexts.slice(0,3).map((what,i)=>({id:`old-shot-${i}`,signature:`old-${i}`,media:'写真',what,skuIds:[],count:1})),stories:oldShootTexts.slice(3).map((asset,i)=>({text:`保存済みStory${i+1}`,asset,skuIds:[],materialMode:'新規撮影必要'}))};
@@ -45,7 +46,7 @@ assert.equal(context.storyPrepGroups([lineupPost]).length,4,'旧postのStory素�
 vm.runInContext(fs.readFileSync('dist/content-quality.js','utf8'),context);
 const results=cases.map(p=>context.createConcept(p.date,0));
 for(const p of results){
-  assert.ok([...p.caption].length>=300,p.date+' 本文');
+  assert.ok([...p.caption].length>=500,p.date+' 新規AI本文');
   assert.ok(!/アンケートでは|お客様から.*声/.test(p.caption),p.date+' 根拠なき声');
   assert.equal(p.stories.length,4);
   assert.equal(p.stories[1].kind,'質問スタンプ');
@@ -59,7 +60,7 @@ for(const p of results){
   assert.ok(p.shots.every(s=>s.media===(p.format==='Reel'?'動画':'写真')));
   assert.equal(context.specificShootDirections(p),p.shots);
 }
-assert.equal(new Set(results.map(p=>p.caption)).size,3);
+assert.equal(new Set(results.map(p=>p.caption)).size,cases.length);
 assert.equal(results[2].stories[2].skuIds.length,1);
 assert.equal(results[0].stories[2].skuIds.length,0);
 const forced=context.createConcept(cases[0].date,0,'forced');

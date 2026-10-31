@@ -12,10 +12,11 @@ const story1={slot:1,theme:'old Story1',text:'original',skuIds:[],storySpecVersi
 const post={id:'post-today',date:'2026-10-11',revision:2,theme:'Feed theme',format:'Reel',caption:'Feed caption',skuIds:['sku-1'],shots:[{id:'shot-1'}],stories:[story1,{slot:2,text:'Story2',skuIds:[]},{slot:3,text:'Story3',skuIds:[]},{slot:4,text:'Story4',skuIds:[]}]};
 let state={categories:[{id:'cat-1'}],items:[{id:'item-1'}],skus:[{id:'sku-1'}],posts:[post],records:{'post-today|7d':{views:20}},months:{'2026-10':{date:'2026-10-04'}},reactions:[]};
 const original=structuredClone(state);
-let saved='',toastMessage='',clickHandler,section,afterExtras=false;
-const extras={after(node){section=node;afterExtras=true;}};
+let saved='',toastMessage='',clickHandler,section,afterExtras=false,afterPlanHeading=false;
+const extras={after(){afterExtras=true;}};
+const planHeading={after(node){section=node;afterPlanHeading=true;}};
 const document={createElement:()=>({innerHTML:'',hidden:false}),addEventListener(type,listener){if(type==='click')clickHandler=listener;}};
-const context={document,demo:state,TODAY:'2026-10-11',STORY_ROLES:['知る・役立つ・楽しむ','参加・対話する','発見','投稿へ'],storyDrafts:new Map(),structuredClone,crypto:require('node:crypto').webcrypto,html:value=>String(value).replaceAll('&','&amp;').replaceAll('<','&lt;').replaceAll('"','&quot;'),dx:selector=>selector==='#dailyExtras'?extras:selector==='#story1Alternatives'?section:selector==='#view-home'?{classList:{contains:()=>false}}:null,currentStoryDraft:p=>({stories:[{theme:'unsaved proposal'},...p.stories.slice(1)]}),renderHome:()=>{},persist:()=>{saved=JSON.stringify(context.demo);},refreshWork:()=>context.renderHome(),toast:message=>{toastMessage=message;},Map,JSON};
+const context={document,demo:state,TODAY:'2026-10-11',STORY_ROLES:['知る・役立つ・楽しむ','参加・対話する','発見','投稿へ'],storyDrafts:new Map(),structuredClone,crypto:require('node:crypto').webcrypto,html:value=>String(value).replaceAll('&','&amp;').replaceAll('<','&lt;').replaceAll('"','&quot;'),dx:selector=>selector==='#dailyExtras'?extras:selector==='#view-plan .section-head'?planHeading:selector==='#story1Alternatives'?section:selector==='#view-plan'?{classList:{contains:()=>false}}:null,currentStoryDraft:p=>({stories:[{theme:'unsaved proposal'},...p.stories.slice(1)]}),renderPlan:()=>{},persist:()=>{saved=JSON.stringify(context.demo);},refreshWork:()=>context.renderPlan(),toast:message=>{toastMessage=message;},Map,JSON};
 vm.createContext(context);
 vm.runInContext(safety,context);
 vm.runInContext(source,context);
@@ -43,11 +44,19 @@ for(let offset=0;offset<4;offset++){
   fashionSlots+=selected.filter(candidate=>candidate.genre==='ファッション').length;
 }
 assert.equal(fashionSlots,7,'fashion uses 35% of the four-day candidate rotation');
-context.renderHome();
-assert(afterExtras,'candidate section is placed after 撮影・プラン・予定');
+context.renderPlan();
+assert(afterPlanHeading,'candidate section is placed in the 10-day plan');
+assert(!afterExtras,'HOME does not contain Story1 alternatives');
 assert.match(section.innerHTML,/Story1 サブ候補/);
+assert.match(section.innerHTML,/<details><summary>今日のStory1 サブ候補を見る<\/summary>/,'candidate list is collapsed on iPhone');
 assert.equal((section.innerHTML.match(/data-story1-alternative=/g)||[]).length,5,'five choice buttons render');
-for(const candidate of candidates){assert(section.innerHTML.includes(candidate.title));assert(section.innerHTML.includes(candidate.sourceUrl));}
+for(const candidate of candidates){
+  assert(section.innerHTML.includes(candidate.title),'candidate title is shown');
+  assert(section.innerHTML.includes(candidate.body),'full candidate body is shown');
+  assert(section.innerHTML.includes(candidate.imageInstruction),'shooting instruction is shown');
+  assert(section.innerHTML.includes(candidate.sourceName),'source name is shown');
+  assert(section.innerHTML.includes(candidate.sourceUrl),'source link is shown');
+}
 
 const choice=candidates[0];
 const button={dataset:{story1Post:post.id,story1Alternative:choice.id}};
@@ -75,7 +84,7 @@ assert.equal(context.currentStoryDraft(post).stories[0].alternativeId,choice.id,
 
 state=JSON.parse(saved);context.demo=state;context.refreshWork();
 assert.equal(state.posts[0].stories[0].alternativeId,choice.id,'local reload keeps selected Story1');
-assert.match(section.innerHTML,/Story1 サブ候補/,'home section survives reload');
+assert.match(section.innerHTML,/Story1 サブ候補/,'plan section survives reload');
 const start=sync.indexOf('const clean='),end=sync.indexOf('const status=',start);
 vm.runInContext(sync.slice(start,end),context);
 const splitStart=sync.indexOf('function splitState('),splitEnd=sync.indexOf('async function readWorkspace(',splitStart);

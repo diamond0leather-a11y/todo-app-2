@@ -23,15 +23,16 @@ function story1Alternatives(post){
   return chosen;
 }
 function renderStory1Alternatives(){
-  const extras=dx('#dailyExtras');if(!extras)return;
+  const heading=dx('#view-plan .section-head');if(!heading)return;
   let section=dx('#story1Alternatives');
-  if(!section){section=document.createElement('section');section.id='story1Alternatives';section.className='card';extras.after(section);}
+  if(!section){section=document.createElement('section');section.id='story1Alternatives';section.className='card';}
+  heading.after(section);
   const post=demo.posts.find(p=>p.stories?.some((story,index)=>(story.slot??index+1)===1&&(story.date??p.date)===TODAY));
   const standalone=!post&&demo.storyDays?.find(story=>story.date===TODAY&&story.slot===1);
   if(!post&&!standalone){section.hidden=true;return;}
   const target=post||{id:standalone.id,date:TODAY,stories:[standalone]};
   section.hidden=false;
-  section.innerHTML=`<h3>Story1 サブ候補</h3><p class="tiny muted">今日のStory1だけを差し替えます。出典と写真の使用権を投稿前に確認してください。</p>`+story1Alternatives(target).map(candidate=>`<article class="story1-alternative"><span class="badge">${html(candidate.genre)}</span><h4>${html(candidate.title)}</h4><p class="tiny muted">${html(candidate.summary)}</p><p class="story-text">${html(candidate.body)}</p><p><strong>写真：</strong>${html(candidate.imageInstruction)}</p><p class="tiny">出典：<a href="${html(candidate.sourceUrl)}" target="_blank" rel="noopener noreferrer">${html(candidate.sourceName)}</a></p><button class="secondary full" data-story1-alternative="${candidate.id}" data-story1-post="${target.id}">この案に変更</button></article>`).join('');
+  section.innerHTML=`<details><summary>今日のStory1 サブ候補を見る</summary><p class="tiny muted">今日のStory1だけを差し替えます。出典と写真の使用権を投稿前に確認してください。</p>`+story1Alternatives(target).map(candidate=>`<article class="story1-alternative"><span class="badge">${html(candidate.genre)}</span><h4>${html(candidate.title)}</h4><p class="tiny muted">${html(candidate.summary)}</p><p class="story-text">${html(candidate.body)}</p><p><strong>写真：</strong>${html(candidate.imageInstruction)}</p><p class="tiny">出典：<a href="${html(candidate.sourceUrl)}" target="_blank" rel="noopener noreferrer">${html(candidate.sourceName)}</a></p><button class="secondary full" data-story1-alternative="${candidate.id}" data-story1-post="${target.id}">この案に変更</button></article>`).join('')+'</details>';
 }
 function applyStory1Alternative(postId,candidateId){
   const post=demo.posts.find(p=>p.id===postId&&p.stories?.some((story,index)=>(story.slot??index+1)===1&&(story.date??p.date)===TODAY));
@@ -49,7 +50,7 @@ function applyStory1Alternative(postId,candidateId){
 }
 const story1OriginalDraft=currentStoryDraft;
 currentStoryDraft=function(post){const draft=story1OriginalDraft(post);if(post.stories?.[0]?.alternativeId&&draft.stories[0]!==post.stories[0])draft.stories[0]=structuredClone(post.stories[0]);return draft;};
-const story1OriginalHome=renderHome;
-renderHome=function(){story1OriginalHome();renderStory1Alternatives();};
+const story1OriginalPlan=renderPlan;
+renderPlan=function(){story1OriginalPlan();renderStory1Alternatives();};
 document.addEventListener('click',event=>{const button=event.target.closest('[data-story1-alternative]');if(button)applyStory1Alternative(button.dataset.story1Post,button.dataset.story1Alternative);});
-if(dx('#view-home')?.classList.contains('active'))refreshWork();
+if(dx('#view-plan')?.classList.contains('active'))renderPlan();
