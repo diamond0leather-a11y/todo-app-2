@@ -35,7 +35,7 @@ const run=async()=>{await new Promise(resolve=>server.listen(0,'127.0.0.1',resol
  await page.evaluate(()=>{const legacy=demo.posts.find(post=>post.date==='2026-10-06');for(const shot of legacy.shots)shot.signature=[shot.media,shot.what].join('|');persist();localStorage.setItem('__qa_old_local',JSON.stringify(demo));});
  synced=true;await page.reload();try{await page.waitForFunction(()=>!!window.todo2SyncBridge?.flush&&!document.body.classList.contains('firebase-locked'));}catch(error){console.error('QA sync startup',await page.evaluate(()=>({locked:document.body.classList.contains('firebase-locked'),bridge:!!window.todo2SyncBridge?.flush,text:document.body.innerText.slice(-700)})),errors);throw error;}
  await page.evaluate(plans=>{go('plan');document.querySelector('#importTenEditorial').click();document.querySelector('[name=json]').value=JSON.stringify({schema:'cian-editorial-v1',scope:'ten-day',plans});document.querySelector('#workForm').requestSubmit();},plans);
- assert((await page.locator('#workTitle').textContent()).includes('プレビュー'));assert((await page.locator('#workForm').textContent()).includes('新案を反映する日：0件／10件'));
+  assert((await page.locator('#workTitle').textContent()).includes('プレビュー'));assert((await page.locator('#workForm').textContent()).includes('新案を反映する日：10件／10件'),'不足Storyだけを自動採用候補にする');
  await page.locator('#workForm [data-editorial-approve]:not([disabled])').evaluateAll(inputs=>inputs.forEach(input=>{input.checked=true;input.dispatchEvent(new Event('change',{bubbles:true}));}));
  assert((await page.locator('#workForm').textContent()).includes('新案を反映する日：10件／10件'));
  // Force the missing-event path: the old flush implementation falsely reported success here.
