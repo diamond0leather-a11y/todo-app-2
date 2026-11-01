@@ -2,6 +2,7 @@ const assert=require('node:assert/strict');
 const fs=require('node:fs');
 const path=require('node:path');
 const vm=require('node:vm');
+const {execFileSync}=require('node:child_process');
 
 const root=__dirname;
 const source=fs.readFileSync(path.join(root,'daily-cycle.js'),'utf8');
@@ -89,4 +90,6 @@ const cycleDemo=fixture();
 const cycle=vm.runInNewContext(cycleCode+'\nsaleCandidateCycle',{demo:cycleDemo,dayAdd:(date,days)=>new Date(Date.parse(date+'T12:00:00Z')+days*86400000).toISOString().slice(0,10),saleRestockLineup:()=>[]});
 assert.equal(cycle('2026-10-04').saleDate,'2026-10-04','sale day still targets 10/4');
 assert.equal(cycle('2026-10-05').saleDate,'2026-11-08','next cycle automatically targets 11/8');
-console.log('PASS sale-day restock + current selling, rollover, deduplication, shared monthly/initial/final set, saved values');
+// 上の検証は旧daily-cycle.jsとの互換性。現行の公開画面は後段の販売予定統一処理を別途検証する。
+execFileSync(process.execPath,[path.join(root,'qa-v7-sale-schedule.cjs')],{cwd:root,stdio:'pipe'});
+console.log('PASS legacy sales history and current scheduled-vs-always-on target rules');

@@ -7,8 +7,6 @@ const stateApi=require('./dist/v7-story-state.js');
 const start='2026-10-30';
 const dates=Array.from({length:10},(_,index)=>{const day=new Date(start+'T00:00:00Z');day.setUTCDate(day.getUTCDate()+index);return day.toISOString().slice(0,10);});
 const makeStory=(date,slot)=>({text:`${date} の Story ${slot} を見る理由と具体的な案内です`,asset:`${date} の写真 ${slot}`,action:`${date} の次の行動 ${slot}`,materialMode:'過去素材使用可',skuIds:[],...(slot===2?{kind:'会話'}:{})});
-const makePlan=(date,index)=>({date,dayNumber:index+1,format:'投稿なし',...Object.fromEntries([1,2,3,4].map(slot=>['story'+slot,makeStory(date,slot)]))});
-const plans=dates.map(makePlan);
 const feedBody=[
  'この日は、革小物を毎日の持ち物にどう合わせるかを考えます。まず机の上に普段持ち歩くカード、鍵、紙類を並べ、何を一緒に持ちたいのかを目で確認します。',
  '最初の写真は小物の外側を手元と同じ画面に入れて撮ります。次の写真では開いた状態を見せ、収納部の位置と出し入れする向きを確かめます。実際に入る量は商品の仕様と実物を確認し、写真だけで断定しません。',
@@ -18,7 +16,8 @@ const feedBody=[
  '商品ページでは素材、寸法、販売予定を確認できます。分からない点は質問として残し、実物で確かめてから答えます。今日の写真が、自分に合う使い方を考えるきっかけになれば幸いです。'
 ].join('\n\n');
 assert.ok([...feedBody].length>=500,'Feedあり日の架空AI本文は500文字以上');
-plans[2]={...plans[2],format:'Feed',primaryPurpose:'CUSTOMER_VALUE',customerValue:'暮らしの使い方',themeId:null,mainTopic:'架空の投稿',mainPostBody:feedBody,products:[],shots:[{media:'写真',what:'テスト用の手元を撮る',count:1,skuIds:[]}],CTA:'商品を見る'};
+const makePlan=(date,index)=>({date,dayNumber:index+1,format:index%2?'Reel':'Feed',primaryPurpose:'CUSTOMER_VALUE',customerValue:'暮らしの使い方',themeId:null,mainTopic:'架空の投稿',mainPostBody:feedBody,products:[],shots:[{media:'写真',what:'テスト用の手元を撮る',count:1,skuIds:[]}],CTA:'商品を見る',...Object.fromEntries([1,2,3,4].map(slot=>['story'+slot,makeStory(date,slot)]))});
+const plans=dates.map(makePlan);
 const ctx={V7StoryState:stateApi,demo:{posts:[],storyDays:[],reactions:[],shotDone:{},records:[],salesResults:{}},structuredClone,OFFICIAL_TOPICS:[],V7_OFFICIAL_TOPICS:[],ALL_OFFICIAL_TOPICS:[],STORY_ROLES:['毎日見る理由','会話','販売SKU補完','次の行動'],SCHEMA:'qa',validAxes:['CUSTOMER_VALUE','INSTAGRAM_GROWTH','BUSINESS'],MOCK_KEY:'qa',displayedPeriod:'current',newId:(()=>{let id=0;return ()=>`qa-story-${++id}`;})(),short:value=>value,html:String,sku:()=>null,skuLabel:value=>value,
   blocked:()=>false,dayDiff:(to,from)=>Math.round((Date.parse(to)-Date.parse(from))/86400000),dayAdd:(date,n)=>{const day=new Date(date+'T00:00:00Z');day.setUTCDate(day.getUTCDate()+n);return day.toISOString().slice(0,10);},
   importPeriod:()=>({from:dates[0],to:dates[9],dayFrom:1}),warnings:()=>[],qualityAudit:()=>({issues:[],exposure:{issues:[]}}),validate:()=>[],salesCycleBlock:()=>({nextFrom:dates[0]}),persist(){},finishPreview(){},refreshWork(){},toast(){},
@@ -33,12 +32,13 @@ vm.runInContext(ui.slice(ui.indexOf('function v7StoryHasReaction'),ui.indexOf('c
 const snapshot=()=>Object.fromEntries(dates.map(date=>[date,[1,2,3,4].map(slot=>ctx.V7StoryState.entriesOnDate(ctx.demo,date).filter(entry=>entry.slot===slot).map(entry=>JSON.stringify(entry.story)))]));
 const target=(selected={})=>({data:{schema:'qa',scope:'ten-day',plans:structuredClone(plans)},period:{from:dates[0],to:dates[9]},revisions:Object.fromEntries(dates.map(date=>[date,null])),storySnapshot:snapshot(),legacyChoices:{},approvals:Object.fromEntries(dates.map(date=>[date,{v7Selection:true,createPost:false,meta:false,caption:false,cta:false,products:false,shots:false,stories:selected[date]||[]}])),exposureConfirmed:true});
 (async()=>{
-  assert.equal(ctx.validateEditorialPlan(plans[0],{scope:'ten-day'}).plan.format,'投稿なし');
-  assert.equal(ctx.validateEditorialPlan(plans[2],{scope:'ten-day'}).plan.format,'Feed');
+  assert.equal(ctx.validateEditorialPlan(plans[0],{scope:'ten-day'}).plan.format,'Feed');
+  assert.equal(ctx.validateEditorialPlan(plans[1],{scope:'ten-day'}).plan.format,'Reel');
+  assert.throws(()=>ctx.validateEditorialPlan({...plans[0],format:'投稿なし'},{scope:'ten-day'}),/FeedまたはReel/);
   assert.equal(ctx.validate({schema:'qa',scope:'ten-day',plans}).length,0);
   const qualityCtx={OFFICIAL_TOPICS:[],V7_OFFICIAL_TOPICS:[],ALL_OFFICIAL_TOPICS:[],productContext:()=>[],postHistories:()=>({actualHistory:[]}),exposureSummary:()=>({last10:{bySku:{}},last20:{bySku:{}}}),monthlySaleStrategy:()=>[],skuLabel:String,short:String};
   vm.createContext(qualityCtx);vm.runInContext(source.slice(source.indexOf('function contentText('),source.indexOf('function importPeriod(')),qualityCtx);
-  assert(Array.isArray(qualityCtx.qualityAudit(plans).issues),'quality checks also accept Story-only dates without a runtime error');
+  assert(Array.isArray(qualityCtx.qualityAudit(plans).issues),'quality checks accept all daily Feed/Reel and Story proposals');
   ctx.importPeriod=()=>({from:dates[0],to:dates[9],dayFrom:null});
   assert.equal(ctx.validate({schema:'qa',scope:'ten-day',plans}).length,0,'first sale has no prior day number');
   ctx.importPeriod=()=>({from:dates[0],to:dates[9],dayFrom:1});
@@ -51,5 +51,23 @@ const target=(selected={})=>({data:{schema:'qa',scope:'ten-day',plans:structured
   const reloaded=JSON.parse(ctx.localStorage.saved);assert.equal(reloaded.storyDays.length,4);assert.equal(reloaded.posts.length,0);
   const stale=target({[dates[0]]:[1]});ctx.demo.storyDays[0].text='別端末の編集';await assert.rejects(ctx.savePreview(stale),/プレビュー後に変更/);assert.equal(ctx.demo.storyDays[0].text,'別端末の編集');
   ctx.demo.reactions.push({id:'reaction-1',sourceStory:{storyId}});const locked=target({[dates[0]]:[1]});await assert.rejects(ctx.savePreview(locked),/反応が記録/);assert.equal(ctx.demo.storyDays[0].id,storyId);assert.equal(ctx.demo.reactions.length,1);
-  console.log('PASS ten-day Story dates: all 10 required, post/no-post, opt-in only, storyDays-only, IDs, reload, conflict, reaction lock');
+  ctx.demo={posts:[{id:'protected-post',date:dates[0],revision:2,caption:'確定済み本文',stories:[],shots:[],manual:true}],storyDays:[],reactions:[],shotDone:{},records:[],salesResults:{}};
+  const selectedDates=dates.slice(2,6),selected=target(Object.fromEntries(selectedDates.map(date=>[date,[1,2,3,4]])));
+  for(const date of selectedDates)selected.approvals[date].createPost=true;
+  selected.revisions[dates[0]]={id:'protected-post',revision:1};
+  let flushCalls=0;ctx.window.todo2SyncBridge.flush=async(_state,postIds)=>{flushCalls++;assert.equal(postIds.length,4,'共有保存には選択した4投稿のIDだけを渡す');};
+  await ctx.savePreview(selected);
+  assert.equal(flushCalls,1,'共有保存を1回呼ぶ');
+  assert.equal(ctx.demo.posts.length,5,'選択した4日だけ投稿を作成');
+  assert.equal(ctx.demo.storyDays.length,16,'選択した4日だけStoryを保存');
+  assert.deepEqual(ctx.demo.posts.filter(post=>post.id==='protected-post').map(post=>[post.revision,post.caption]),[[2,'確定済み本文']],'未選択の既存投稿を維持');
+  assert.deepEqual(ctx.demo.posts.filter(post=>post.id!=='protected-post').map(post=>post.date),selectedDates,'未選択日は投稿を作成しない');
+  const saved=JSON.parse(ctx.localStorage.saved);
+  assert.equal(saved.posts.length,5,'再読み込み用の端末保存に4日分が残る');
+  assert.equal(saved.storyDays.length,16,'再読み込み用の端末保存にStoryが残る');
+  const offline=target({[dates[6]]:[1]});offline.approvals[dates[6]].createPost=true;
+  ctx.window.todo2SyncBridge.flush=async()=>{throw Error('mock-offline');};
+  await assert.rejects(ctx.savePreview(offline),/mock-offline/,'共有保存失敗を成功扱いしない');
+  assert.ok(offline.localApplied,'共有保存失敗時も端末内の採用結果を保持する');
+  console.log('PASS ten-day Story dates: all 10 with Feed/Reel, opt-in only, storyDays-only, IDs, reload, conflict, reaction lock');
 })().catch(error=>{console.error(error);process.exitCode=1;});

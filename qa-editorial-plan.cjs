@@ -33,6 +33,15 @@ const single=p=>ctx.validateSingle({schema:ctx.SCHEMA,scope:ctx.SINGLE_SCOPE,pla
 
 assert.equal(ten(plan()).length,0);
 assert.equal(single(plan()).id,'v7-official-01');
+const noPost=plan();noPost.format='投稿なし';
+assert.throws(()=>ten(noPost),/FeedまたはReel/,'新規10日企画に投稿なしを含めない');
+const conversation=plan();conversation.story2={text:'お客様の使い方を振り返り、次の案内につなげます。',kind:'通常',asset:'写真',materialMode:'新規撮影必要',action:'次の案内を見る'};
+assert.equal(ten(conversation).length,0,'質問なしの会話Story2を許可');
+const missingKind=plan();missingKind.story2={...conversation.story2};delete missingKind.story2.kind;
+assert.equal(ten(missingKind).length,0,'質問なしでも参加形式を強制しない');
+const wrongPoll=plan();wrongPoll.story2={...conversation.story2,text:'どちらを選びますか？',action:'アンケートに答える'};
+assert.ok(ten(wrongPoll).some(issue=>issue.level==='要修正'),'アンケートを会話として偽装しない');
+ctx.blocked=()=>true;assert.equal(ten(plan()).length,0,'投稿不可日も企画案は検証可能');ctx.blocked=()=>false;
 for(const count of [499,500]){
  const proposal=plan();proposal.mainPostBody='本文'.repeat(249)+(count===500?'文。':'文');
  assert.equal([...proposal.mainPostBody].length,count);
