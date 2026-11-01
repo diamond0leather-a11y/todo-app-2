@@ -191,6 +191,11 @@ html,body,button,input,textarea,select,h1,h2,h3,.theme{font-family:Meiryo,'メ�
 }
 </style>
 <link rel="icon" href="data:image/svg+xml,%3Csvg%20xmlns%3D%22http%3A//www.w3.org/2000/svg%22%20viewBox%3D%220%200%2032%2032%22%3E%3Crect%20width%3D%2232%22%20height%3D%2232%22%20rx%3D%226%22%20fill%3D%22%23394b3c%22/%3E%3Ctext%20x%3D%228%22%20y%3D%2223%22%20fill%3D%22white%22%20font-size%3D%2224%22%3Ec%3C/text%3E%3C/svg%3E">
+<style>
+.work-calendar button .year-coverage{font-size:9px!important;line-height:1.15;white-space:normal;text-align:center;padding:2px;border-radius:4px;max-width:100%;box-sizing:border-box}
+.year-coverage-missing{background:#fff0d8;color:#68400b}.year-coverage-duplicate{background:#f9dfdd;color:#802c27}.year-coverage-ok{background:#e3f0e4;color:#285936}
+#yearCoverageSummary{margin:8px 0 0;line-height:1.5}
+</style>
 </head>
 <body class="firebase-locked">
 <noscript><p style="padding:20px">この表示画面ではアプリを動かせません。ファイルをダウンロードし、ChromeまたはEdgeで開いてください。</p></noscript>
@@ -500,6 +505,7 @@ html,body,button,input,textarea,select,h1,h2,h3,.theme{font-family:Meiryo,'メ�
 
   <div id="toast" class="toast" role="status"></div>
   <script src="./v7-story-state.js"></script>
+  <script src="./v7-year-coverage.js"></script>
   <script>
 
 const STORAGE_KEY = "cian_confirmed_mock_unused_legacy";
@@ -2082,6 +2088,32 @@ document.addEventListener('click',event=>{
  const button=event.target.closest('[data-sale-schedule-step]');if(!button)return;
  saleScheduleMonth=addMonths(saleScheduleMonth,Number(button.dataset.saleScheduleStep));renderSaleSchedule();
 });
+const previousYearCoverageRender=renderMonthWork;
+renderMonthWork=function(){
+ previousYearCoverageRender();
+ const coverage=V7YearCoverage.year(demo,monthCursor.slice(0,4)),byDate=new Map(coverage.days.map(day=>[day.date,day]));
+ const calendar=dx('#monthWorkCalendar');
+ for(const cell of calendar.querySelectorAll('[data-work-date]')){
+  const result=byDate.get(cell.dataset.workDate),hasMissing=result.missing.length>0,hasDuplicate=result.duplicate.length>0;
+  const label=hasMissing&&hasDuplicate?'不足・重複':hasMissing?'不足':hasDuplicate?'重複':'5枠OK';
+  const badge=document.createElement('small');badge.className='year-coverage '+(hasDuplicate?'year-coverage-duplicate':hasMissing?'year-coverage-missing':'year-coverage-ok');badge.textContent=label;
+  cell.append(badge);
+  cell.setAttribute('aria-label',cell.getAttribute('aria-label')+' 企画'+label+(hasMissing?' 不足:'+result.missing.join('、'):'')+(hasDuplicate?' 重複:'+result.duplicate.join('、'):''));
+  cell.title='企画 '+label+(hasMissing?'｜不足: '+result.missing.join('、'):'')+(hasDuplicate?'｜重複: '+result.duplicate.join('、'):'');
+ }
+ let summary=dx('#yearCoverageSummary');if(!summary){summary=document.createElement('p');summary.id='yearCoverageSummary';summary.className='tiny muted';calendar.before(summary);}
+ summary.textContent=monthCursor.slice(0,4)+'年の保存済み企画：不足 '+coverage.missingDays+'日／重複 '+coverage.duplicateDays+'日（全'+coverage.days.length+'日）。日付を押すと既存の投稿画面へ進めます。';
+};
+const previousYearCoverageOpenDate=openMonthDate;
+openMonthDate=function(date){
+ previousYearCoverageOpenDate(date);
+ const result=V7YearCoverage.day(demo,date),parts=[];
+ if(result.missing.length)parts.push('不足：'+result.missing.join('、'));
+ if(result.duplicate.length)parts.push('重複：'+result.duplicate.join('、'));
+ if(!parts.length)return;
+ const target=dx('#workDialog').open?dx('#workBody'):dx('#dayDialog').open?dx('#dayDetail'):null;
+ if(target){const notice=document.createElement('p');notice.className='notice';notice.textContent='保存済み企画の5枠チェック｜'+parts.join('／');target.prepend(notice);}
+};
 </script>
 <script src="./firebase-config-v7.js"></script>
 <script type="module" src="./firebase-sync.js?diagnostics=shots-flat-v2&amp;merge=structural-v1"></script>
