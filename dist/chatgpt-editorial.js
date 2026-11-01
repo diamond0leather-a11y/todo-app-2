@@ -581,15 +581,11 @@ const contextBeforeDailyStories=context;
 context=function(scope){const data=contextBeforeDailyStories(scope),from=data.period.from;if(scope==='ten-day')data.period.days=data.period.days.map((day,index)=>({...day,dayNumber:day.dayNumber||((salesCycleBlock()?.dayFrom??1)+index)}));data.storyHistory=V7StoryState.historyEntries(demo,{before:from,limitDays:30}).map(entry=>({date:entry.date,slot:entry.slot,status:entry.status,text:entry.story.text||'',asset:entry.story.asset||'',action:entry.story.action||'',skuIds:entry.story.skuIds||[]}));return data;};
 const promptBeforeDailyStories=prompt;
 prompt=function(scope){if(scope!=='ten-day')return promptBeforeDailyStories(scope);return promptBeforeDailyStories(scope)
- .replace('投稿不可日はplansへ含めず、投稿可能日はすべてplansに含めてください。','投稿不可日も含む10日間の全日付をplansへ含め、Feed／Reelがない日はformatを「投稿なし」にしてください。全日でStory1〜4を提案します。')
- .replace('各planのshotsにメイン投稿の撮影指示を必ず入れ','Feed／Reelがあるplanだけshotsにメイン投稿の撮影指示を必ず入れ')
- .replace('本文は全日500文字以上。','Feed／Reelがある日の本文は500文字以上。')
- .replace('Story4は今日のFeed/Reelで具体的に確認できることへの導線','Story4はFeed／Reelがある日はその投稿への具体的な導線、ない日は商品・販売日・保存など自然な次の行動')
- .replace('Story4：今日のメイン投稿への自然な導線','Story4：その日の内容に合う自然な次の行動')
- .replace('Story4はその日のメイン投稿を見る独立した具体的な導線','Story4は投稿がある日はその投稿へ、投稿がない日は商品・販売日・保存などへの具体的な導線')
+ .replace('投稿不可日はplansへ含めず、投稿可能日はすべてplansに含めてください。','投稿不可日も含む10日間の全日付をplansへ含めてください。投稿を実施するかどうかは利用者が判断します。')
+ .replace('Story1：ファッション・カルチャー・生活・社会の「今」を知る。','Story1：見たい・知りたい・役立つ・楽しむにつながる毎日見る理由。')
  .replace('Story1：ファッション・カルチャー・生活・社会の「今」を知る。','Story1：見たい・知りたい・役立つ・楽しむにつながる毎日見る理由。')
  .replace('Story1はメインの要約ではなく、今のファッション・カルチャー・生活・社会を扱う。','Story1はメイン投稿の要約ではなく、その日に見る理由を作る。')
  .replace('Story2は参加・対話で質問箱／アンケート／二択／クイズを使い分け','Story2は自然な会話を基本とし、必要な日だけ質問箱／アンケート／二択／クイズを使い分け')
- +'\n\n【10日分の独立Story・最優先】plansは期間内の10日すべてを日付順に含めてください。各planにstory1〜story4のtext・asset・action・materialMode・skuIdsを含めます。Feed／Reelがない日は {"date":"YYYY-MM-DD","dayNumber":1,"format":"投稿なし","story1":{"text":"...","asset":"...","action":"...","materialMode":"過去素材使用可","skuIds":[]},"story2":{...},"story3":{...},"story4":{...}} の形にし、投稿本文・撮影指示・テーマIDなどの投稿専用項目は不要です。Story1は毎日見る理由、Story2は会話（毎日質問しない）、Story3は月間販売SKUの補完、Story4はその日に合う自然な次の行動です。正式100テーマは番号順に消費せず、引き出しとして使ってください。storyHistoryには投稿のない日を含む過去Storyがあります。案は提案であり保存・採用は利用者が枠ごとに決めます。';};
+ .replace('\n\n編集コンテキスト：\n','\n\n【毎日5件の企画・最優先】投稿不可日も含む対象期間の10日すべてを日付順にplansへ含めてください。毎日FeedまたはReelのどちらか1件だけを提案し、「投稿なし」の企画、同日のFeedとReelの併記、企画の欠落を認めません。各日のメイン本文は500文字以上、メイン投稿の撮影指示をshotsに入れてください。毎日Story1〜4を各1件、合計4件提案し、各枠にtext・asset・action・materialMode・skuIdsを含めます。Story1は毎日見る理由、Story2は会話（毎日質問しない）、Story3は月間販売SKUの補完、Story4はその日のメイン投稿から次の行動への自然な導線です。正式100テーマは番号順に消費せず、引き出しとして使ってください。storyHistoryには投稿しなかった日を含む過去Storyがあります。投稿不可日と「今日は投稿しない」は実際に投稿するかの判断にのみ使い、企画は消さず、保存・採用は利用者が決めます。既存の確定済み企画は上書きしません。\n\n編集コンテキスト：\n');};
 window.editorialPlanner={context,prompt,nextContext:nextEditorialContext,nextPrompt:nextEditorialPrompt,extract,validate,warnings,singleContext,singlePrompt,validateSingle,periodReview};refreshWork();
 })();

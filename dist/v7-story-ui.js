@@ -115,7 +115,7 @@ editPostMeta=function(id){
 const v7PreviousRenderHome=renderHome;
 renderHome=function(){
   v7PreviousRenderHome();
-  const todayPost=demo.posts.find(post=>post.date===TODAY&&!post.deleted&&!post.paused);
+  const todayPost=demo.posts.find(post=>post.date===TODAY&&!post.deleted);
   if(todayPost){
     const cuts=todayPost.shots||[],done=cuts.filter(shotDoneFor).length;
     dx('#homeTodayContent').insertAdjacentHTML('beforeend',`<p class="tiny muted">撮影 ${done}/${cuts.length}カット完了</p>`);

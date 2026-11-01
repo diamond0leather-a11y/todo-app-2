@@ -4,7 +4,7 @@ const vm=require('node:vm');
 
 const source=fs.readFileSync('dist/chatgpt-editorial.js','utf8');
 assert.doesNotMatch(source,/300文字以上|INDUSTRY\s*#?66〜80/,'AI向けの新規本文条件・旧テーマ分類を残さない');
-assert.match(source,/Feed／Reelがある日の本文は500文字以上/,'10日プランのAI本文条件');
+assert.match(source,/各日のメイン本文は500文字以上/,'10日プランのAI本文条件');
 assert.match(source,/singlePrompt=function\(post\).*本文は500文字以上/,'単日再提案のAI本文条件');
 const section=(from,to)=>source.slice(source.indexOf(from),source.indexOf(to));
 const date='2026-10-11';

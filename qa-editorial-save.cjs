@@ -25,6 +25,8 @@ const run=async()=>{await new Promise(resolve=>server.listen(0,'127.0.0.1',resol
   demo.conceptVersion=1;persist();return {plans,period:salesCycleBlock()};
  });
  assert.equal(setup.period.nextFrom,'2026-10-05');assert.equal(setup.period.nextTo,'2026-10-14');
+ const instructions=await page.evaluate(()=>[window.editorialPlanner.prompt('ten-day'),window.editorialPlanner.nextPrompt()].map(value=>value.split('\n\n編集コンテキスト：')[0]));
+ for(const instruction of instructions){assert.match(instruction,/毎日5件の企画/);assert.match(instruction,/投稿不可日も含む対象期間の10日すべて/);assert.match(instruction,/毎日FeedまたはReelのどちらか1件だけ/);assert.match(instruction,/Story1〜4を各1件/);assert.doesNotMatch(instruction,/Feed／Reelがない日は|"format":"投稿なし"|投稿不可日はplansへ含めず/);}
  await page.evaluate(plans=>{go('plan');document.querySelector('#importTenEditorial').click();document.querySelector('[name=json]').value=JSON.stringify({schema:'cian-editorial-v1',scope:'ten-day',plans});document.querySelector('#workForm').requestSubmit();},setup.plans);
  const importError=await page.locator('#workError').textContent();assert.equal(importError,'',importError);
  assert((await page.locator('#workTitle').textContent()).includes('プレビュー'));
