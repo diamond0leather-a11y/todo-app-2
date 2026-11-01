@@ -473,16 +473,14 @@ html,body,button,input,textarea,select,h1,h2,h3,.theme{font-family:Meiryo,'メ�
 
   <!-- DAY DETAIL -->
   <dialog id="dayDialog" class="sheet">
-    <div class="sheet-inner">
-      <div class="row between sticky-sheet-head">
-        <div>
-          <div class="section-kicker" id="dialogDayLabel">DAY 1</div>
-          <h2 id="dialogTitle">投稿詳細</h2>
-        </div>
-        <button class="icon-btn" data-close-dialog="dayDialog" aria-label="閉じる">×</button>
+    <div class="row between sticky-sheet-head">
+      <div>
+        <div class="section-kicker" id="dialogDayLabel">DAY 1</div>
+        <h2 id="dialogTitle">投稿詳細</h2>
       </div>
-      <div id="dayDetail"></div>
+      <button class="icon-btn" data-close-dialog="dayDialog" aria-label="閉じる">×</button>
     </div>
+    <div class="sheet-inner"><div id="dayDetail"></div></div>
   </dialog>
 
   <!-- PRODUCTS -->
@@ -1886,7 +1884,7 @@ document.head.insertAdjacentHTML('beforeend','<style>#dayDetail .v7-post-block{m
 <script src="./v7-story-ui.js?story-ai=20261028"></script>
 <script>
 // v7.1: read-only daily execution view. Existing post, Story and shot editors remain the only edit paths.
-dx('main').insertAdjacentHTML('beforeend',`<section class="view execution-view" id="view-execution"><div class="section-head"><div><div class="section-kicker">TODAY</div><h2>今日の実行内容</h2></div></div><p id="executionDate" class="muted"></p><div id="executionContent"></div><button type="button" class="ghost full" data-nav="home">HOMEへ戻る</button></section>`);
+dx('main').insertAdjacentHTML('beforeend',`<section class="view execution-view" id="view-execution"><div class="section-head execution-head"><div><div class="section-kicker">TODAY</div><h2>今日の実行内容</h2></div><button type="button" class="icon-btn" data-nav="home" aria-label="HOMEへ戻る">×</button></div><p id="executionDate" class="muted"></p><div id="executionContent"></div><button type="button" class="ghost full" data-nav="home">HOMEへ戻る</button></section>`);
 function executionLine(label,value,className=''){
   return typeof value==='string'&&value.trim()?`<div class="execution-line"><strong>${html(label)}</strong><p class="${className}">${html(value)}</p></div>`:'';
 }
@@ -1951,9 +1949,14 @@ window.addEventListener('focus',checkExecutionDate);
 checkExecutionDate();
 </script>
 <style>
+#dayDialog[open]{display:flex;flex-direction:column;overflow:hidden;background:var(--paper)}
+#dayDialog>.sticky-sheet-head{position:relative;top:auto;flex:0 0 auto;z-index:5;background:var(--paper);padding:calc(8px + env(safe-area-inset-top,0px)) calc(18px + env(safe-area-inset-right,0px)) 12px 18px;border-bottom:1px solid var(--line)}
+#dayDialog>.sheet-inner{flex:1 1 auto;height:auto;min-height:0;overflow-y:auto;padding-top:0;-webkit-overflow-scrolling:touch}
+.execution-view .execution-head{position:sticky;top:0;z-index:19;background:#f5f4f0;padding:calc(8px + env(safe-area-inset-top,0px)) calc(8px + env(safe-area-inset-right,0px)) 8px 2px}
+.execution-view .execution-head .icon-btn{flex:0 0 44px;min-width:44px;min-height:44px}
 #dayDialog,#workDialog{overflow:hidden}
-#dayDialog>.sheet-inner,#workDialog>.sheet-inner{height:100%;min-height:0;overflow-y:auto;overscroll-behavior:contain;-webkit-overflow-scrolling:touch}
-#dayDialog .sticky-sheet-head,#workDialog .sticky-sheet-head{position:sticky;top:0;z-index:5;padding-top:calc(8px + env(safe-area-inset-top,0px))}
+#workDialog>.sheet-inner{height:100%;min-height:0;overflow-y:auto;overscroll-behavior:contain;-webkit-overflow-scrolling:touch}
+#workDialog .sticky-sheet-head{position:sticky;top:0;z-index:5;padding-top:calc(8px + env(safe-area-inset-top,0px))}
 #dayDialog .sticky-sheet-head .icon-btn,#workDialog .sticky-sheet-head .icon-btn{flex:0 0 44px;min-width:44px;min-height:44px}.execution-view .card{min-width:0;margin-bottom:12px;overflow-wrap:anywhere}
 .execution-view .card h3{margin:0 0 12px}
 .execution-shot{padding:10px 0;border-top:1px solid #e5e8e0;min-width:0;overflow-wrap:anywhere}
