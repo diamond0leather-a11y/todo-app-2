@@ -110,7 +110,12 @@ const run=async()=>{await new Promise(resolve=>server.listen(0,'127.0.0.1',resol
  assert.equal(await page.locator('#workTitle').textContent(),'ChatGPT JSONを取り込む','normal import must recover after success');
  await page.evaluate(()=>document.querySelector('#workDialog').close());
   await page.evaluate(()=>{demo=emptyV7State();demo.months['2026-10']={date:'2026-10-04',time:'21:00',lineup:[]};demo.posts.push({id:'deleted-history',date:'2026-10-05',format:'Feed',theme:'旧企画',caption:'旧本文',deleted:true,skuIds:[],shots:[],sequence:[],stories:[{slot:1,text:'削除済みの旧Story'}]});persist();go('plan');document.querySelector('#importTenEditorial').click();});
-  await page.evaluate(plans=>{document.querySelector('[name=json]').value=JSON.stringify({schema:'cian-editorial-v1',scope:'ten-day',plans});document.querySelector('#workForm').requestSubmit();},setup.plans);
+  await page.locator('#editorialJsonFile').setInputFiles({name:'broken.json',mimeType:'application/json',buffer:Buffer.from('{"schema":')});
+  assert.match(await page.locator('#workError').textContent(),/JSONファイルの形式/,'不正なJSONはプレビューせず理由を表示');
+  await page.locator('#editorialJsonFile').setInputFiles({name:'wrong-schema.json',mimeType:'application/json',buffer:Buffer.from(JSON.stringify({schema:'wrong',scope:'ten-day',plans:setup.plans}))});
+  assert.match(await page.locator('#workError').textContent(),/schema/,'schema不一致を明示');
+  await page.locator('#editorialJsonFile').setInputFiles({name:'ten-day.json',mimeType:'application/json',buffer:Buffer.from('\uFEFF```json\n'+JSON.stringify({schema:'cian-editorial-v1',scope:'ten-day',plans:setup.plans})+'\n```  ')});
+  assert.match(await page.locator('#workTitle').textContent(),/10日全体プレビュー/,'BOM・コードフェンス付きファイルからコピーなしでプレビュー');
   const fresh=await page.evaluate(()=>({choices:Object.values(window.__qaPreview().approvals),checks:document.querySelectorAll('[data-editorial-approve]').length,button:document.querySelector('#workForm .save-foot button').textContent}));
   assert.equal(fresh.choices.length,10);assert(fresh.choices.every(choice=>choice.createPost&&choice.stories.join(',')==='1,2,3,4'),'新規10日・50枠を候補に設定');assert.equal(fresh.checks,0,'新規10日に個別チェックは不要');assert.equal(fresh.button,'確認して一括保存');
   await page.locator('#workForm .save-foot button').click();try{await page.locator('#workDialog').waitFor({state:'hidden',timeout:3000});}catch(error){throw Error('fresh import save: '+await page.locator('#workError').textContent());}

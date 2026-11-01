@@ -43,7 +43,7 @@ const target=(selected={})=>({data:{schema:'qa',scope:'ten-day',plans:structured
   ctx.importPeriod=()=>({from:dates[0],to:dates[9],dayFrom:null});
   assert.equal(ctx.validate({schema:'qa',scope:'ten-day',plans}).length,0,'first sale has no prior day number');
   ctx.importPeriod=()=>({from:dates[0],to:dates[9],dayFrom:1});
-  assert.throws(()=>ctx.validate({schema:'qa',scope:'ten-day',plans:plans.slice(0,9)}),/Story案がありません/);
+  assert.throws(()=>ctx.validate({schema:'qa',scope:'ten-day',plans:plans.slice(0,9)}),/2026-11-08のFeed／ReelとStory1〜4がありません/);
   assert.throws(()=>ctx.validate({schema:'qa',scope:'ten-day',plans:[...plans,plans[0]]}),/重複/,'同日2件を拒否');
   const before=JSON.stringify(ctx.demo),none=target();await assert.rejects(ctx.savePreview(none),/保護されています/);assert.equal(JSON.stringify(ctx.demo),before);
   const missing=target({[dates[0]]:[1]});await assert.rejects(ctx.savePreview(missing),/Feed／Reel企画が未登録/,'Storyだけの保存で企画0件を残さない');assert.equal(JSON.stringify(ctx.demo),before);
