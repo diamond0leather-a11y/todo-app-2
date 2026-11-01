@@ -1907,17 +1907,17 @@ function renderExecution(){
     <div class="execution-actions"><button type="button" class="secondary" data-work-post="${html(post.id)}">投稿詳細で編集</button>${posts.length>1?`<button type="button" class="ghost" data-execution-more>ほか${posts.length-1}件を見る</button>`:''}</div>
   </article>`:'<article class="card"><h3>今日のFeed / Reel</h3><p>今日の投稿予定はありません。</p></article>';
   const shots=[...new Map(posts.flatMap(item=>(item.shots||[]).map((shot,index)=>[shot.id||shot.signature||item.id+'|'+index,shot]))).values()];
-  const shootSection=`<article class="card"><h3>今日の撮影</h3><p>${shots.length}カット中${shots.filter(shotDoneFor).length}カット撮影済み</p><button type="button" class="secondary" data-nav="shoot">撮影画面を見る</button></article>`;
+  const shootSection=`<article class="card"><h3>メイン投稿の撮影</h3><p>${shots.length}カット中${shots.filter(shotDoneFor).length}カット撮影済み</p>${shots.map((shot,index)=>`<div class="execution-shot"><strong>カット${index+1}｜${html(shot.media||'撮影')} · ${html(shotDoneFor(shot)?'撮影済み':'未撮影')}</strong><p class="execution-copy">${html(shot.what||'撮影内容未設定')}</p><small>${html(shot.count||1)}カット${shot.skuIds?.length?' · '+html(shot.skuIds.map(skuLabel).join(' ＋ ')):''}</small></div>`).join('')||'<p class="muted">撮影指示は未登録です。</p>'}<button type="button" class="secondary" data-nav="shoot">撮影画面を見る</button></article>`;
   const entries=V7StoryState.entriesOnDate(demo,date);
   const storySection=[1,2,3,4].map(slot=>{
     const entry=entries.find(value=>value.slot===slot),story=entry?.story;
     const body=story?`${executionLine('テーマ・内容',story.theme||'')}${executionLine('文章',story.text||'','execution-copy')}
-      ${executionLine('使用素材',story.asset||'','execution-copy')}${executionLine('参加方法',story.kind&&story.kind!=='なし'?story.kind:'')}
+      ${executionLine('使用素材',story.asset||'未設定','execution-copy')}${executionLine('素材準備',story.materialMode||'未設定')}${executionLine('参加方法',story.kind&&story.kind!=='なし'?story.kind:'')}
       ${Array.isArray(story.options)&&story.options.length?executionLine('選択肢',story.options.join('／')):''}${executionLine('答え',story.correctAnswer||'')}
       ${slot===3&&story.skuIds?.length?executionLine('対象SKU',story.skuIds.map(skuLabel).join(' ＋ ')):''}
-      ${executionLine(slot===4?'次の行動・CTA':'見た方への案内',story.action||'','execution-copy')}
+      ${executionLine(slot===4?'次の行動・CTA':'見た方への案内',story.action||'未設定','execution-copy')}
       <button type="button" class="ghost" data-v7-story-edit="${html(entry.post?.id||story.id)}|${entry.index}">Storyを編集</button>`:'';
-    return `<article class="card execution-story"><h3>Story ${slot}｜${html(STORY_ROLES[slot-1])}</h3>${body}</article>`;
+    return `<article class="card execution-story"><h3>Story ${slot}｜${html(STORY_ROLES[slot-1])}</h3>${body||'<p class="muted">この枠は未登録です。</p>'}</article>`;
   }).join('');
   dx('#executionContent').innerHTML=postSection+shootSection+storySection;
 }
@@ -1953,6 +1953,8 @@ checkExecutionDate();
 <style>
 .execution-view .card{min-width:0;margin-bottom:12px;overflow-wrap:anywhere}
 .execution-view .card h3{margin:0 0 12px}
+.execution-shot{padding:10px 0;border-top:1px solid #e5e8e0;min-width:0;overflow-wrap:anywhere}
+.execution-shot p{margin:4px 0;line-height:1.6}
 .execution-line{margin:12px 0;min-width:0}
 .execution-line strong{display:block;font-size:13px;color:#555f51}
 .execution-line p{margin:4px 0 0;line-height:1.65;overflow-wrap:anywhere}
