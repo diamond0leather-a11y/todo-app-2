@@ -6,7 +6,7 @@ const ui=fs.readFileSync('dist/v7-story-ui.js','utf8');
 const V7StoryState=require('./dist/v7-story-state.js');
 const date='2026-11-05';
 const clone=structuredClone;
-const base=()=>({posts:[{id:'post-1',date,revision:1,manual:true,caption:'手動本文',cta:'手動CTA',skuIds:['sku-old'],shots:[{id:'cut-1',media:'写真',what:'手動撮影',skuIds:[],signature:'done-1'}],sequence:[{shotId:'cut-1'}],stories:[]}],storyDays:[1,2,3,4].map(slot=>({id:'story-'+slot,date,slot,text:'手動Story'+slot,manual:true})),reactions:[],shotDone:{'shot-id|cut-1':true},records:[{id:'7d'}],sales:[{id:'sale'}]});
+const base=()=>({posts:[{id:'post-1',date,format:'Feed',revision:1,manual:true,caption:'手動本文',cta:'手動CTA',skuIds:['sku-old'],shots:[{id:'cut-1',media:'写真',what:'手動撮影',skuIds:[],signature:'done-1'}],sequence:[{shotId:'cut-1'}],stories:[]}],storyDays:[1,2,3,4].map(slot=>({id:'story-'+slot,date,slot,text:'手動Story'+slot,manual:true})),reactions:[],shotDone:{'shot-id|cut-1':true},records:[{id:'7d'}],sales:[{id:'sale'}]});
 const plan=()=>({date,format:'Feed',primaryPurpose:'BUSINESS',themeId:null,mainTopic:'AI企画',customerValue:'価値',mainPostBody:'AI本文',CTA:'AI CTA',products:[],shots:[{media:'写真',what:'AI撮影',count:1,skuIds:[]}],story1:{text:'AI Story1'},story2:{text:'AI Story2'},story3:{text:'AI Story3'},story4:{text:'AI Story4'}});
 let id=0,writes=0;
 const ctx={demo:base(),V7StoryState,structuredClone,OFFICIAL_TOPICS:[],V7_OFFICIAL_TOPICS:[],ALL_OFFICIAL_TOPICS:[],STORY_ROLES:['知る','対話','発見','導線'],displayedPeriod:'current',MOCK_KEY:'qa',SCHEMA:'qa',SINGLE_SCOPE:'single-day-reproposal',newId:()=>`new-${++id}`,short:value=>value,html:String,
@@ -17,6 +17,7 @@ const ctx={demo:base(),V7StoryState,structuredClone,OFFICIAL_TOPICS:[],V7_OFFICI
 ctx.shotDoneFor=shot=>!!(ctx.demo.shotDone['shot-id|'+shot.id]??ctx.demo.shotDone[shot.signature]);
 vm.createContext(ctx);
 vm.runInContext(editorial.slice(editorial.indexOf('function importProtection('),editorial.indexOf('function validateEditorialShots(')),ctx);
+vm.runInContext(editorial.slice(editorial.indexOf('function editorialCoverageIssues('),editorial.indexOf('function validate(data)')),ctx);
 vm.runInContext(editorial.slice(editorial.indexOf('async function savePreview(target)'),editorial.indexOf('function finishPreview(')),ctx);
 vm.runInContext(ui.slice(ui.indexOf('function v7StoryHasReaction'),ui.indexOf('// Single-day proposals use')),ctx);
 vm.runInContext(editorial.slice(editorial.indexOf('function showSingleOptInPreview'),editorial.indexOf('function openSingleImport(')),ctx);

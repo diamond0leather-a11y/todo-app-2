@@ -178,7 +178,8 @@ function validateEditorialPlan(plan,{scope}){
  if(tenDay||Object.hasOwn(p,'shots'))validateEditorialShots(p.shots,p.date);
  return {plan:p,topic,story2Issue:story2Issue(p.story2)};
 }
-function validate(data){
+ function editorialCoverageIssues(data,approvals,posts){const problems=[];for(const plan of data.plans){const found=posts.filter(post=>!post.deleted&&post.date===plan.date);if(found.length>1)problems.push(`${plan.date}のFeed／Reel企画が${found.length}件あります。重複を確認してください。`);else if(found.length===1&&!['Feed','Reel'].includes(found[0].format))problems.push(`${plan.date}の既存企画の形式を確認してください。`);else if(!found.length&&!approvals?.[plan.date]?.createPost)problems.push(`${plan.date}のFeed／Reel企画が未登録です。この日の「Feed／Reel投稿を新規作成」を選んでください。`);}return problems;}
+ function validate(data){
  if(!data||data.schema!==SCHEMA||data.scope!=='ten-day')throw Error('10日企画JSONのschemaまたは形式が一致しません。');
  if(!Array.isArray(data.plans))throw Error('10日企画JSONのplansを確認してください。');
  const period=importPeriod(data),seen=new Set();
@@ -249,8 +250,8 @@ showPreview=function(){
   form.querySelector('.editorial-day-preview')?.insertAdjacentHTML('beforebegin',panel);
   const save=form.querySelector('.save-foot button'),status=document.createElement('p'),jump=document.createElement('a');status.className='notice';jump.href='#';jump.className='ghost full';jump.textContent='確認欄へ移動';jump.hidden=true;save.before(status,jump);
   const selectedCount=()=>data.plans.filter(plan=>{const choice=preview.approvals[plan.date];return choice&&Object.entries(choice).some(([key,value])=>!['v7Selection','sameShots'].includes(key)&&(Array.isArray(value)?value.length:value));}).length;
-  const ready=()=>!issues.length&&selectedCount()>0&&(!research.length||preview.researchConfirmed)&&(!exposureNotes.length||preview.exposureConfirmed);
-  const updateSave=()=>{const count=selectedCount(),missingResearch=research.length&&!preview.researchConfirmed,missingExposure=exposureNotes.length&&!preview.exposureConfirmed;status.textContent=`新案を反映する日：${count}件／${data.plans.length}件。保護する日は旧案を維持します。`+(issues.length?'要修正の内容を確認してください。':count===0?'採用する日・項目を選んでください。':missingResearch?'出典確認のチェック欄にチェックしてください。':missingExposure?'商品露出チェック内の確認欄にチェックしてください。':'保存できます。');save.disabled=!ready();save.textContent=issues.length?'要修正・保存できません':count===0?'反映する日がありません':missingResearch?'出典の確認が必要':missingExposure?'商品露出の確認が必要':'保存する';jump.hidden=!count||!missingResearch&&!missingExposure;jump.onclick=event=>{event.preventDefault();const input=form.querySelector(missingResearch?'#editorialResearchConfirm':'#editorialExposureConfirm');const details=input?.closest('details');if(details)details.open=true;input?.scrollIntoView({block:'center',behavior:'smooth'});};};
+  const ready=()=>!issues.length&&selectedCount()>0&&!editorialCoverageIssues(data,preview.approvals,demo.posts).length&&(!research.length||preview.researchConfirmed)&&(!exposureNotes.length||preview.exposureConfirmed);
+  const updateSave=()=>{const count=selectedCount(),coverage=editorialCoverageIssues(data,preview.approvals,demo.posts),missingResearch=research.length&&!preview.researchConfirmed,missingExposure=exposureNotes.length&&!preview.exposureConfirmed;status.textContent=`新案を反映する日：${count}件／${data.plans.length}件。保護する日は旧案を維持します。`+(issues.length?'要修正の内容を確認してください。':count===0?'採用する日・項目を選んでください。':coverage.length?coverage.join(' '):missingResearch?'出典確認のチェック欄にチェックしてください。':missingExposure?'商品露出チェック内の確認欄にチェックしてください。':'保存できます。');save.disabled=!ready();save.textContent=issues.length?'要修正・保存できません':count===0?'反映する日がありません':coverage.length?'未登録日の企画を選んでください':missingResearch?'出典の確認が必要':missingExposure?'商品露出の確認が必要':'保存する';jump.hidden=!count||!missingResearch&&!missingExposure;jump.onclick=event=>{event.preventDefault();const input=form.querySelector(missingResearch?'#editorialResearchConfirm':'#editorialExposureConfirm');const details=input?.closest('details');if(details)details.open=true;input?.scrollIntoView({block:'center',behavior:'smooth'});};};
   form.querySelectorAll('[data-legacy-preserve]').forEach(input=>input.addEventListener('change',updateSave));
   form.querySelectorAll('[data-editorial-approve]').forEach(input=>input.addEventListener('change',updateSave));
   if(research.length)form.querySelector('#editorialResearchConfirm').onchange=event=>{preview.researchConfirmed=event.target.checked;updateSave();};
@@ -278,7 +279,8 @@ async function savePreview(target){
   if(target.data.plans.some(plan=>{const topic=V7_OFFICIAL_TOPICS.find(entry=>entry.id===plan.themeId);return topic?.researchRequired;})&&!target.researchConfirmed)throw Error('該当テーマの出典確認が必要です。');
    const eligible=target.data.plans.filter(plan=>{const choice=target.approvals?.[plan.date];return choice&&Object.entries(choice).some(([key,value])=>!['v7Selection','sameShots'].includes(key)&&(Array.isArray(value)?value.length:value));});
   if(!eligible.length)throw Error('すべての投稿が保護されています。置き換える項目を明示的に選ぶか、現在の内容を維持してください。');
-  for(const plan of eligible){const old=editorialPostForDate(demo.posts,plan.date),seen=target.revisions[plan.date];if((old?.id||null)!==(seen?.id||null)||(old?.revision||null)!==(seen?.revision||null))throw Error(`${short(plan.date)}の投稿がプレビュー中に変更されました。開き直して確認してください。`);}
+  const coverage=editorialCoverageIssues(target.data,target.approvals,demo.posts);if(coverage.length)throw Error(coverage.join(' '));
+   for(const plan of eligible){const old=editorialPostForDate(demo.posts,plan.date),seen=target.revisions[plan.date];if((old?.id||null)!==(seen?.id||null)||(old?.revision||null)!==(seen?.revision||null))throw Error(`${short(plan.date)}の投稿がプレビュー中に変更されました。開き直して確認してください。`);}
    const previousPosts=demo.posts,previousStoryDays=demo.storyDays,previousShotDone=demo.shotDone,previousPeriod=displayedPeriod,nextPosts=structuredClone(demo.posts),nextStoryDays=structuredClone(demo.storyDays||[]),nextShotDone=structuredClone(demo.shotDone||{});
   for(const x of target.data.plans){
      const old=editorialPostForDate(nextPosts,x.date),choice=target.approvals?.[x.date],lock=importProtection(old,choice||target.legacyChoices[x.date]);
