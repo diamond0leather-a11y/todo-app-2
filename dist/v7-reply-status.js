@@ -25,7 +25,26 @@
     }
     return reaction;
   }
-  const api = {eligible, label, pending, change};
+  function saveBasic(reaction, values, save) {
+    if (!reaction || !String(values.question || '').trim()) throw Error('お客様の声・質問を入力してください');
+    if (values.replyStatus && !statuses.includes(values.replyStatus)) throw Error('返信状態を確認してください');
+    const previous = {question: reaction.question, source: reaction.source, replyStatus: reaction.replyStatus};
+    reaction.question = String(values.question);
+    reaction.source = String(values.source || 'その他');
+    if (eligible(reaction)) {
+      if (values.replyStatus) reaction.replyStatus = values.replyStatus;
+      else delete reaction.replyStatus;
+    }
+    try { save(); } catch (error) {
+      reaction.question = previous.question;
+      reaction.source = previous.source;
+      if (previous.replyStatus === undefined) delete reaction.replyStatus;
+      else reaction.replyStatus = previous.replyStatus;
+      throw error;
+    }
+    return reaction;
+  }
+  const api = {eligible, label, pending, change, saveBasic};
   root.V7ReplyStatus = api;
   if (typeof module !== 'undefined' && module.exports) module.exports = api;
 })(typeof globalThis !== 'undefined' ? globalThis : this);

@@ -2165,6 +2165,47 @@ document.addEventListener('click',event=>{
  try{V7ReplyStatus.change(demo.reactions,button.dataset.replyId,button.dataset.replyStatus,persist);refreshWork();toast('個別返信の状態を保存しました');}
  catch(error){toast(error.message||'返信状態を保存できませんでした');}
 });
+const previousSimpleReactionEdit=editReaction;
+editReaction=function(id){
+ previousSimpleReactionEdit(id);
+ const form=dx('#workForm'),reaction=demo.reactions.find(value=>value.id===id),question=form.elements.question.closest('label'),source=form.elements.voiceSource?.closest('label');
+ if(!question||!source)return;
+ const replyField=document.createElement('div');
+ replyField.innerHTML=formSelect('返信状態','replyStatus',[['','未判断'],['needed','要返信'],['replied','返信済み'],['not-needed','返信不要']],reaction?.replyStatus||'');
+ const replyLabel=replyField.firstElementChild;
+ question.after(source);source.after(replyLabel);
+ const advanced=document.createElement('details');advanced.id='reactionAdvanced';
+ const summary=document.createElement('summary');summary.textContent='詳細設定';advanced.append(summary);replyLabel.after(advanced);
+ const saveFoot=form.querySelector('.save-foot'),error=dx('#workError');
+ for(const child of [...form.children])if(![question,source,replyLabel,advanced,saveFoot,error].includes(child))advanced.append(child);
+ const date=form.elements.date?.closest('label');if(date)date.hidden=true;
+ const replySelect=form.elements.replyStatus,kindSelect=form.elements.kind;
+ let advancedTouched=false;
+ advanced.addEventListener('input',()=>advancedTouched=true);
+ advanced.addEventListener('change',()=>advancedTouched=true);
+ for(const [name,value] of [['voiceSource',reaction?.source],['kind',reaction?.kind],['voiceType',reaction?.voiceType],['postId',reaction?.postId]]){
+  const select=form.elements[name];if(value&&select&&![...select.options].some(option=>option.value===value))select.add(new Option(value,value));
+  if(value&&select)select.value=value;
+ }
+ const updateReplyField=()=>{const aggregate=!V7ReplyStatus.eligible({kind:kindSelect.value});replySelect.disabled=aggregate;replyLabel.title=aggregate?'アンケート集計は個別返信の対象外です':'';};
+ kindSelect.addEventListener('change',updateReplyField);queueMicrotask(updateReplyField);
+ const save=form.onsubmit;
+ form.onsubmit=event=>{
+  const status=replySelect.value,kind=kindSelect.value,before=demo.reactions.length;
+  if(reaction&&!advanced.open&&!advancedTouched){
+   event.preventDefault();
+   try{V7ReplyStatus.saveBasic(reaction,{question:form.elements.question.value,source:form.elements.voiceSource.value,replyStatus:status},persist);dx('#workDialog').close();refreshWork();toast('保存しました');}
+   catch(error){dx('#workError').textContent=error.message;}
+   return;
+  }
+  save(event);
+  if(dx('#workDialog').open)return;
+  const target=id?demo.reactions.find(value=>value.id===id):demo.reactions[before];
+  if(!target||!V7ReplyStatus.eligible({kind}))return;
+  if(status)target.replyStatus=status;else delete target.replyStatus;
+  persist();refreshWork();
+ };
+};
 </script>
 <script src="./firebase-config-v7.js"></script>
 <script type="module" src="./firebase-sync.js?diagnostics=shots-flat-v2&amp;merge=structural-v1"></script>

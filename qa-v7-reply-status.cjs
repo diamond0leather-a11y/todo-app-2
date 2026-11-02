@@ -49,7 +49,7 @@ assert.equal(storyPanel.entries[0].dataset.nav, 'results');
 assert.equal(storyPanel.entries[0].type, 'button');
 
 const start = html.indexOf('const previousReplyHomeRender=renderHome;');
-const end = html.indexOf('</script>', start);
+const end = html.indexOf('const previousSimpleReactionEdit=editReaction;', start);
 assert(start > 0 && end > start);
 const panel = {children: [], placeholder: {textContent: '今日入力するものはありません', remove(){panel.placeholder = null;}}, querySelector(){return this.placeholder;}, append(node){this.children.push(node);}};
 const cards = state.reactions.map(reaction => ({reaction, removed: false, row: null, querySelector(){return {dataset: {workReaction: reaction.id}};}, remove(){this.removed = true;}, after(row){this.row = row;}}));

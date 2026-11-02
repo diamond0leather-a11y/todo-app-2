@@ -296,6 +296,7 @@ recordStoryResponse=function(id,index,mode){
   if(!existing){
     form.elements.question.value=story.text||story.theme||'';
     form.elements.date.value=post?V7StoryState.dateOf(story,post):story.date;
+    form.elements.voiceSource.value='Story';
     form.elements.theme.value=story.theme||'';
     form.elements.kind.value=story.kind==='二択'?'アンケート':['クイズ','アンケート','質問スタンプ'].includes(story.kind)?story.kind:'リアクション';
     for(const input of form.querySelectorAll('[name=skuIds]'))input.checked=(story.skuIds||[]).includes(input.value);

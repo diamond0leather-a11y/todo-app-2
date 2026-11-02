@@ -7,7 +7,7 @@ const story={id:'new-story',date:'2026-11-05',slot:1,text:'新Story',theme:'文�
 const oldReaction={id:'old-reaction',sourceStory:{postId:'post-1',slot:1,snapshot:{text:'旧Story'}},question:'旧質問'};
 const post={id:'post-1',date:'2026-11-07',stories:[story],revision:1};
 const dialog={open:true},options={innerHTML:''};
-const form={elements:{question:{value:''},date:{value:''},theme:{value:''},kind:{value:''},parentId:{value:''}},querySelectorAll:()=>[],querySelector:()=>options,onsubmit:null};
+const form={elements:{question:{value:''},date:{value:''},voiceSource:{value:'その他'},theme:{value:''},kind:{value:''},parentId:{value:''}},querySelectorAll:()=>[],querySelector:()=>options,onsubmit:null};
 const state={posts:[post],reactions:[oldReaction]};
 let editedId='unset',saved=0;
 const ctx={demo:state,structuredClone,V7StoryState:require('./dist/v7-story-state.js'),currentStoryDraft:()=>({stories:[]}),newId:()=> 'generated',formInput:()=>'',persist(){saved++;},
@@ -17,6 +17,7 @@ vm.createContext(ctx);vm.runInContext(source.slice(source.indexOf('function v7St
 ctx.recordStoryResponse('post-1',0,'saved');
 assert.equal(editedId,undefined,'legacy slot-only reaction is not selected');
 assert.equal(form.elements.date.value,'2026-11-05','Story date is used, not the moved Feed date');
+assert.equal(form.elements.voiceSource.value,'Story','Story source is preselected');
 form.onsubmit({});
 assert.equal(state.reactions.length,2);
 assert.equal(state.reactions[0].sourceStory.storyId,undefined,'old reaction is not rewritten');
