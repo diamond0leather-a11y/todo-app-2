@@ -34,7 +34,7 @@ assert.equal(normalYear.days.at(-1).date, '2026-12-31');
 assert.equal(leapYear.days.find(d => d.date === '2028-02-29').date, '2028-02-29');
 assert.equal(JSON.stringify(frozen), before);
 const html = fs.readFileSync('./dist/index.html', 'utf8');
-assert.match(html, /<script src="\.\/v7-year-coverage\.js"><\/script>/);
+assert.match(html, /<script src="\.\/v7-year-coverage\.js(?:\?[^"<>]+)?"><\/script>/);
 assert.match(html, /const previousYearCoverageRender=renderMonthWork/);
 assert.match(html, /calendar\.before\(summary\)/);
 assert.match(html, /const previousYearCoverageOpenDate=openMonthDate/);

@@ -508,7 +508,7 @@ html,body,button,input,textarea,select,h1,h2,h3,.theme{font-family:Meiryo,'メ�
 
   <div id="toast" class="toast" role="status"></div>
   <script src="./v7-story-state.js"></script>
-  <script src="./v7-year-coverage.js"></script>
+  <script src="./v7-year-coverage.js?coverage=20261102-recovery"></script>
   <script src="./v7-reply-status.js"></script>
   <script>
 
@@ -2244,7 +2244,14 @@ document.addEventListener('click',event=>{
 function nextPlanCoverage(){
  const next=nextPlanInfo();
  if(!next)return null;
- return V7YearCoverage.period(demo,next.nextFrom,next.nextTo);
+ // 旧JSがSafariに残っていても共有データの初期表示を妨げない。
+ try{
+  if(typeof V7YearCoverage==='undefined')return null;
+  if(typeof V7YearCoverage.period==='function')return V7YearCoverage.period(demo,next.nextFrom,next.nextTo);
+  if(typeof V7YearCoverage.day!=='function')return null;
+  const days=Array.from({length:dayDiff(next.nextTo,next.nextFrom)+1},(_,i)=>V7YearCoverage.day(demo,dayAdd(next.nextFrom,i)));
+  return {from:next.nextFrom,to:next.nextTo,days,missing:days.filter(day=>day.missing.length),duplicate:days.filter(day=>day.duplicate.length)};
+ }catch(error){console.warn('次期10日プランの保存済み枠を表示できませんでした');return null;}
 }
 const coverageHomeRender=renderHome;
 renderHome=function(){
