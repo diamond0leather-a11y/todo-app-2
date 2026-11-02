@@ -195,6 +195,9 @@ html,body,button,input,textarea,select,h1,h2,h3,.theme{font-family:Meiryo,'メ�
 .work-calendar button .year-coverage{font-size:9px!important;line-height:1.15;white-space:normal;text-align:center;padding:2px;border-radius:4px;max-width:100%;box-sizing:border-box}
 .year-coverage-missing{background:#fff0d8;color:#68400b}.year-coverage-duplicate{background:#f9dfdd;color:#802c27}.year-coverage-ok{background:#e3f0e4;color:#285936}
 #yearCoverageSummary{margin:8px 0 0;line-height:1.5}
+.reply-quick-actions{display:flex;flex-wrap:wrap;align-items:center;gap:4px;margin:-10px 0 14px;padding:0 6px 10px;border-bottom:1px solid #d6dccb}
+.reply-quick-actions button{min-width:78px;min-height:44px;padding:6px}
+.reply-quick-actions .tiny{flex-basis:100%;line-height:1.4}
 </style>
 </head>
 <body class="firebase-locked">
@@ -506,6 +509,7 @@ html,body,button,input,textarea,select,h1,h2,h3,.theme{font-family:Meiryo,'メ�
   <div id="toast" class="toast" role="status"></div>
   <script src="./v7-story-state.js"></script>
   <script src="./v7-year-coverage.js"></script>
+  <script src="./v7-reply-status.js"></script>
   <script>
 
 const STORAGE_KEY = "cian_confirmed_mock_unused_legacy";
@@ -2114,6 +2118,44 @@ openMonthDate=function(date){
  const target=dx('#workDialog').open?dx('#workBody'):dx('#dayDialog').open?dx('#dayDetail'):null;
  if(target){const notice=document.createElement('p');notice.className='notice';notice.textContent='保存済み企画の5枠チェック｜'+parts.join('／');target.prepend(notice);}
 };
+const previousReplyHomeRender=renderHome;
+renderHome=function(){
+ previousReplyHomeRender();
+ const pending=V7ReplyStatus.pending(demo.reactions);
+ if(!pending.length)return;
+ const panel=dx('#dailyInputs');
+ if(panel.querySelector('p')?.textContent==='今日入力するものはありません')panel.querySelector('p').remove();
+ const button=document.createElement('button');button.type='button';button.className='eventline daily-input-row';button.dataset.replyOpen='';
+ button.innerHTML='<strong>お客様への要返信</strong><span>'+pending.length+'件</span>';
+ panel.append(button);
+};
+const previousReplyResultsRender=renderResults;
+renderResults=function(){
+ const onlyPending=voiceFilter==='reply',savedQuery=reactionQuery;
+ if(onlyPending){voiceFilter='all';reactionQuery='';}
+ try{previousReplyResultsRender();}finally{if(onlyPending){voiceFilter='reply';reactionQuery=savedQuery;}}
+ const list=dx('#reactionListWork'),pending=V7ReplyStatus.pending(demo.reactions),pendingIds=new Set(pending.map(r=>r.id));
+ const chips=list.querySelector('.voice-chips');
+ if(onlyPending)chips?.querySelector('[data-voice-filter="all"]')?.classList.replace('secondary','ghost');
+ chips?.insertAdjacentHTML('beforeend',`<button class="${onlyPending?'secondary':'ghost'} small" data-voice-filter="reply">要返信 ${pending.length}</button>`);
+ for(const card of list.querySelectorAll('details.card')){
+  const edit=card.querySelector('[data-work-reaction]');if(!edit)continue;
+  const reaction=demo.reactions.find(r=>r.id===edit.dataset.workReaction);
+  if(onlyPending&&!pendingIds.has(reaction?.id)){card.remove();continue;}
+  if(!V7ReplyStatus.eligible(reaction))continue;
+  const row=document.createElement('div');row.className='reply-quick-actions';
+  row.innerHTML=`<span class="tiny">個別返信：${V7ReplyStatus.label(reaction)}</span>${[['needed','要返信'],['replied','返信済み'],['not-needed','返信不要']].map(([status,label])=>`<button type="button" class="${reaction.replyStatus===status?'secondary':'ghost'} small" data-reply-id="${html(reaction.id)}" data-reply-status="${status}" aria-label="${html((reaction.originalText||reaction.question||'反応').slice(0,30))}：${label}">${label}</button>`).join('')}`;
+  card.after(row);
+ }
+ if(onlyPending&&!pending.length)list.insertAdjacentHTML('beforeend','<p>要返信の反応はありません。</p>');
+};
+document.addEventListener('click',event=>{
+ const button=event.target.closest('button');if(!button)return;
+ if(button.hasAttribute('data-reply-open')){voiceFilter='reply';reactionQuery='';go('results');return;}
+ if(!button.dataset.replyStatus)return;
+ try{V7ReplyStatus.change(demo.reactions,button.dataset.replyId,button.dataset.replyStatus,persist);refreshWork();toast('個別返信の状態を保存しました');}
+ catch(error){toast(error.message||'返信状態を保存できませんでした');}
+});
 </script>
 <script src="./firebase-config-v7.js"></script>
 <script type="module" src="./firebase-sync.js?diagnostics=shots-flat-v2&amp;merge=structural-v1"></script>
