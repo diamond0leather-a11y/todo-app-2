@@ -2295,9 +2295,15 @@ function story2ResultButtons(scope){
   if(!entry){button.remove();continue;}
   button.removeAttribute('data-v7-story-response');button.removeAttribute('data-story-response');
   button.dataset.story2Result=parts[0]+'|'+index;
-  button.textContent='結果を入力・確認';
+  const saved=V7Story2Result.linked(demo.reactions,entry),status=saved?.story2ResultStatus;
+  const result=status==='none'?'回答なし':status==='not-posted'?'投稿しなかった':
+   status==='entered'?(saved.story2ResultText||'結果の文章が空欄です'):
+   V7Story2Result.completed(saved)?(saved?.answers||[]).join('／')||'保存済みの結果があります':'';
+  if(result)button.insertAdjacentHTML('beforebegin',`<p class="exact story2-saved-result">結果：${html(result)}</p>`);
+  button.textContent=result?'結果を編集':'結果を入力';
  }
 }
+const story2Unconfirmed=new Set();
 function openStory2Result(id,index){
  if(typeof V7Story2Result==='undefined')return;
  const entry=story2ResultEntry(id,index);if(!entry){toast('保存済みの質問・アンケートを確認してください');return;}
@@ -2306,10 +2312,25 @@ function openStory2Result(id,index){
  openForm('Story2の結果',`<p class="tiny muted">予定日 ${html(entry.date)} · Story2の質問</p><p class="exact">${html(entry.story.text||entry.story.theme||'')}</p>`+
   `<label class="wlabel">結果<select name="story2Status" required><option value="">選択してください</option>${[['entered','結果を入力'],['none','回答なし'],['not-posted','投稿しなかった']].map(([value,label])=>`<option value="${value}" ${status===value?'selected':''}>${label}</option>`).join('')}</select></label>`+
   `<label class="wlabel">結果の文章（結果を入力する場合）<textarea name="story2Text" rows="5">${html(text)}</textarea></label>`+
-  '<p class="tiny muted">予定日やStoryの企画は変更しません。後から同じStory2で訂正できます。</p>',form=>{
-   V7Story2Result.save(demo,entry,form.get('story2Status'),form.get('story2Text'),persist,newId);
-   dx('#workDialog').close();refreshWork();toast('Story2の結果を保存しました');return false;
-  });
+   '<p class="tiny muted">予定日やStoryの企画は変更しません。後から同じStory2で訂正できます。</p>',()=>false);
+ const form=dx('#workForm'),submit=form.querySelector('button[type="submit"],.save-foot button');
+ form.onsubmit=async event=>{
+  event.preventDefault();if(submit.disabled)return;
+  submit.disabled=true;submit.textContent='共有へ保存中…';dx('#workError').textContent='';
+  let record;
+  try{
+   if(!window.todo2SyncBridge?.flush)throw Error('共有保存の準備ができていません。接続を確認してください。');
+   const values=new FormData(form);
+   record=V7Story2Result.save(demo,entry,values.get('story2Status'),values.get('story2Text'),persist,newId);
+   story2Unconfirmed.add(record.id);
+   await window.todo2SyncBridge.flush();
+   if(window.todo2SyncBridge.hasPending?.())throw Error('共有保存を確認できませんでした。接続を確認して再試行してください。');
+   story2Unconfirmed.delete(record.id);
+   dx('#workDialog').close();refreshWork();toast('共有への保存を確認しました');
+  }catch(error){
+   dx('#workError').textContent=record?'共有保存を確認できませんでした。入力内容は保持しています。接続を確認して再試行してください。':error.message;
+  }finally{submit.disabled=false;submit.textContent='保存する';}
+ };
 }
 const story2HomeRender=renderHome;
 renderHome=function(){
@@ -2322,7 +2343,7 @@ renderHome=function(){
  if(inputs&&!inputs.querySelector('button')&&!inputs.querySelector('p'))inputs.insertAdjacentHTML('beforeend','<p>今日入力するものはありません</p>');
  if(typeof V7Story2Result==='undefined')return;
  let pending=[];
- try{story2ResultButtons(dx('#homeStoryPreview'));pending=V7Story2Result.pending(demo,TODAY);}
+  try{story2ResultButtons(dx('#homeStoryPreview'));pending=V7Story2Result.entries(demo,TODAY).filter(entry=>!V7Story2Result.completed(entry.reaction)||story2Unconfirmed.has(entry.reaction?.id));}
  catch{console.warn('Story2結果の案内を表示できませんでした');return;}
  if(pending.length){
   inputs.querySelector('p')?.textContent==='今日入力するものはありません'&&inputs.querySelector('p').remove();
