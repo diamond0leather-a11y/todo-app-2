@@ -30,7 +30,23 @@ reply.change(state.reactions, voice.id, 'needed', () => {});
 const html = fs.readFileSync('./dist/index.html', 'utf8');
 assert.match(html, /<script src="\.\/v7-reply-status\.js"><\/script>/);
 assert.match(html, /\.reply-quick-actions button\{min-width:78px;min-height:44px/);
+assert.match(html, /\['home','⌂','ホーム'\],\['catalog','□','商品管理'\],\['month','31','月間'\],\['plan','10','投稿一覧'\]/);
+assert.match(html, /navigate=go;/);
 for (const [, script] of html.matchAll(/<script(?:\s[^>]*)?>([\s\S]*?)<\/script>/g)) if (script.trim()) new vm.Script(script);
+
+const entryStart = html.indexOf('const previousReactionEntryHomeRender=renderHome;');
+const entryEnd = html.indexOf('const previousReplyHomeRender=renderHome;', entryStart);
+assert(entryStart > 0 && entryEnd > entryStart);
+const storyPanel = {entries: [], querySelector(selector){return this.entries.find(node => '#' + node.id === selector);}, append(node){this.entries.push(node);}};
+const entryContext = {renderHome(){}, dx(selector){return selector === '#dailyStories' ? storyPanel : null;}, document: {createElement(){return {dataset: {}};}}};
+vm.createContext(entryContext);
+vm.runInContext(html.slice(entryStart, entryEnd), entryContext);
+entryContext.renderHome();
+entryContext.renderHome();
+assert.equal(storyPanel.entries.length, 1, 'HOME link is not duplicated');
+assert.equal(storyPanel.entries[0].textContent, 'お客様の反応一覧を見る');
+assert.equal(storyPanel.entries[0].dataset.nav, 'results');
+assert.equal(storyPanel.entries[0].type, 'button');
 
 const start = html.indexOf('const previousReplyHomeRender=renderHome;');
 const end = html.indexOf('</script>', start);

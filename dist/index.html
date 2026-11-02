@@ -2118,6 +2118,15 @@ openMonthDate=function(date){
  const target=dx('#workDialog').open?dx('#workBody'):dx('#dayDialog').open?dx('#dayDetail'):null;
  if(target){const notice=document.createElement('p');notice.className='notice';notice.textContent='保存済み企画の5枠チェック｜'+parts.join('／');target.prepend(notice);}
 };
+const previousReactionEntryHomeRender=renderHome;
+renderHome=function(){
+ previousReactionEntryHomeRender();
+ const stories=dx('#dailyStories');
+ if(!stories||stories.querySelector('#homeReactionListEntry'))return;
+ const button=document.createElement('button');button.id='homeReactionListEntry';button.type='button';button.className='ghost full';
+ button.dataset.nav='results';button.textContent='お客様の反応一覧を見る';
+ stories.append(button);
+};
 const previousReplyHomeRender=renderHome;
 renderHome=function(){
  previousReplyHomeRender();
