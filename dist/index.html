@@ -2206,6 +2206,40 @@ editReaction=function(id){
   persist();refreshWork();
  };
 };
+// アンケート結果の共有判断は、個別返信や「返答を掲載済み」と分けて管理する。
+const shareHomeRender=renderHome;
+renderHome=function(){
+ shareHomeRender();
+ const pending=V7ReplyStatus.sharePending(demo.reactions);
+ if(!pending.length)return;
+ const notices=dx('#dailyNotices');
+ notices.hidden=false;
+ notices.insertAdjacentHTML('beforeend',`<button type="button" class="eventline" data-share-open="${html(pending[0].id)}"><strong>アンケート結果の要共有</strong><small>${pending.length}件 · 反応を確認する</small></button>`);
+};
+const shareResultsRender=renderResults;
+renderResults=function(){
+ shareResultsRender();
+ for(const card of dx('#reactionListWork').querySelectorAll('details.card')){
+  const edit=card.querySelector('[data-work-reaction]');
+  const reaction=demo.reactions.find(value=>value.id===edit?.dataset.workReaction);
+  if(!V7ReplyStatus.shareEligible(reaction))continue;
+  const row=document.createElement('div');row.className='reply-quick-actions';
+  row.innerHTML=`<span class="tiny">結果共有：${V7ReplyStatus.shareLabel(reaction)}</span>${[['unset','未設定'],['needed','要共有'],['shared','共有済み'],['not-needed','共有不要']].map(([status,label])=>`<button type="button" class="${(reaction.shareStatus||'unset')===status?'secondary':'ghost'} small" data-share-id="${html(reaction.id)}" data-share-status="${status}">${label}</button>`).join('')}`;
+  card.after(row);
+ }
+};
+document.addEventListener('click',event=>{
+ const button=event.target.closest('button');if(!button)return;
+ if(button.hasAttribute('data-share-open')){
+  voiceFilter='all';reactionQuery='';go('results');
+  const card=[...dx('#reactionListWork').querySelectorAll('details.card')].find(item=>item.querySelector('[data-work-reaction]')?.dataset.workReaction===button.dataset.shareOpen);
+  if(card){card.open=true;card.scrollIntoView({block:'center'});}
+  return;
+ }
+ if(!button.hasAttribute('data-share-id'))return;
+ try{V7ReplyStatus.changeShare(demo.reactions,button.dataset.shareId,button.dataset.shareStatus,persist);refreshWork();toast('結果共有の状態を保存しました');}
+ catch(error){toast('結果共有の状態を保存できませんでした');}
+});
 </script>
 <script src="./firebase-config-v7.js"></script>
 <script type="module" src="./firebase-sync.js?diagnostics=shots-flat-v2&amp;merge=structural-v1"></script>

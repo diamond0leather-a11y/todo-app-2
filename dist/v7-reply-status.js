@@ -3,6 +3,31 @@
   const statuses = ['needed', 'replied', 'not-needed'];
   const aggregate = reaction => /アンケート|二択|クイズ|投票/.test(String(reaction?.kind || ''));
   const eligible = reaction => !!reaction && !aggregate(reaction);
+  const shareStatuses = ['needed', 'shared', 'not-needed'];
+  const shareEligible = reaction => !!reaction && aggregate(reaction);
+  const shareLabel = reaction => ({needed: '要共有', shared: '共有済み', 'not-needed': '共有不要'})[reaction?.shareStatus] || '未設定';
+  function sharePending(reactions) {
+    const seen = new Set();
+    return (reactions || []).filter(reaction => {
+      if (!shareEligible(reaction) || reaction.shareStatus !== 'needed' || !reaction.id || seen.has(reaction.id)) return false;
+      seen.add(reaction.id);
+      return true;
+    });
+  }
+  function changeShare(reactions, id, status, save) {
+    if (status !== 'unset' && !shareStatuses.includes(status)) throw Error('結果共有の状態を確認してください');
+    const reaction = (reactions || []).find(value => value.id === id);
+    if (!shareEligible(reaction)) throw Error('アンケート結果を確認してください');
+    const previous = reaction.shareStatus;
+    if (status === 'unset') delete reaction.shareStatus;
+    else reaction.shareStatus = status;
+    try { save(); } catch (error) {
+      if (previous === undefined) delete reaction.shareStatus;
+      else reaction.shareStatus = previous;
+      throw error;
+    }
+    return reaction;
+  }
   const label = reaction => ({needed: '要返信', replied: '返信済み', 'not-needed': '返信不要'})[reaction?.replyStatus] || '未設定';
   function pending(reactions) {
     const seen = new Set();
@@ -44,7 +69,7 @@
     }
     return reaction;
   }
-  const api = {eligible, label, pending, change, saveBasic};
+  const api = {eligible, label, pending, change, saveBasic, shareEligible, shareLabel, sharePending, changeShare};
   root.V7ReplyStatus = api;
   if (typeof module !== 'undefined' && module.exports) module.exports = api;
 })(typeof globalThis !== 'undefined' ? globalThis : this);
