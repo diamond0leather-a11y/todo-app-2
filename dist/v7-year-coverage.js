@@ -27,7 +27,15 @@
     }
     return {days: result, missingDays: result.filter(value => value.missing.length).length, duplicateDays: result.filter(value => value.duplicate.length).length};
   }
-  const api = {day, year};
+  function period(state, from, to, storyState = root.V7StoryState) {
+    const days = [];
+    for (let time = Date.parse(from + 'T00:00:00Z'), end = Date.parse(to + 'T00:00:00Z'); time <= end; time += 86400000) {
+      const date = new Date(time).toISOString().slice(0, 10);
+      days.push(day(state, date, storyState));
+    }
+    return {from, to, days, missing: days.filter(value => value.missing.length), duplicate: days.filter(value => value.duplicate.length)};
+  }
+  const api = {day, year, period};
   root.V7YearCoverage = api;
   if (typeof module !== 'undefined' && module.exports) module.exports = api;
 })(typeof globalThis !== 'undefined' ? globalThis : this);
