@@ -33,7 +33,7 @@ assert.equal(Object.hasOwn(poll,'shareStatus'),false,'過去データと同じ�
 const html = fs.readFileSync('./dist/index.html','utf8');
 for(const [,script] of html.matchAll(/<script(?:\s[^>]*)?>([\s\S]*?)<\/script>/g))if(script.trim())new vm.Script(script);
 const start=html.indexOf('const shareHomeRender=renderHome;');
-const end=html.indexOf('</script>',start);
+const end=html.indexOf('// 次期10日間は保存済み企画だけを確認する。',start);
 assert(start>0&&end>start);
 const notices={hidden:true,innerHTML:'',insertAdjacentHTML(_where,content){this.innerHTML+=content;}};
 const card={open:false,after(row){this.row=row;},querySelector(){return {dataset:{workReaction:poll.id}};},scrollIntoView(){this.scrolled=true;}};
