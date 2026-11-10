@@ -1,0 +1,43 @@
+// Isolated browser QA: no Firebase configuration or sync is loaded.
+const assert=require('node:assert/strict');
+const fs=require('node:fs');
+const http=require('node:http');
+const os=require('node:os');
+const path=require('node:path');
+const {promisify}=require('node:util');
+const {execFile}=require('node:child_process');
+const run=promisify(execFile);
+const root=path.join(__dirname,'dist');
+const harness=`<script>window.addEventListener('load',()=>setTimeout(()=>{try{
+const from='2026-11-12',to='2026-11-13';
+const original={id:'qa-move',date:from,format:'Feed',theme:'QA',derivedTheme:'QA',caption:'本文を保持',plannedTime:'18:00',actualAt:'2026-11-12T10:00:00+09:00',skuIds:[],shots:[{id:'qa-cut',media:'写真',what:'撮影を保持',count:1,skuIds:[]}],stories:[1,2,3,4].map(slot=>({id:'legacy-'+slot,slot,date:from,text:'Story '+slot,skuIds:[],asset:'素材',action:'見る'})),revision:1};
+demo.posts=[original];demo.storyDays=[1,2,3,4].map(slot=>({id:'canonical-'+slot,slot,date:from,text:'Story '+slot,skuIds:[],asset:'素材',action:'見る'}));demo.reactions=[];demo.records={'qa-move|7d':{postId:'qa-move',stage:'7d',likes:3}};
+showPost(original.id);
+const button=document.querySelector('#dayDetail [data-work-meta]');if(!button)throw Error('date edit entry missing');button.click();
+const form=document.querySelector('#workForm');if(!form?.elements.date)throw Error('date edit form missing');
+form.elements.date.value=to;form.dispatchEvent(new Event('submit',{bubbles:true,cancelable:true}));
+if(document.querySelector('#workDialog').open)throw Error('date save blocked: '+document.querySelector('#workError')?.textContent);
+if(original.date!==to||original.caption!=='本文を保持'||original.shots[0].what!=='撮影を保持'||original.actualAt!=='2026-11-12T10:00:00+09:00'||demo.records['qa-move|7d'].likes!==3)throw Error('post content or review lost');
+if(demo.posts.length!==1||demo.storyDays.some(s=>s.date!==from)||original.stories.some(s=>s.date!==from))throw Error('stories moved or post duplicated');
+if(JSON.parse(localStorage.getItem(MOCK_KEY)).posts[0].date!==to)throw Error('reload lost move');
+demo.posts.push({id:'occupied',date:'2026-11-14',stories:[],skuIds:[]});showPost(original.id);document.querySelector('#dayDetail [data-work-meta]').click();
+const blocked=document.querySelector('#workForm');blocked.elements.date.value='2026-11-14';blocked.dispatchEvent(new Event('submit',{bubbles:true,cancelable:true}));
+if(original.date!==to||!document.querySelector('#workError')?.textContent.includes('すでに投稿'))throw Error('occupied date overwritten');
+document.querySelector('#workDialog').close();
+const reel={id:'qa-reel',date:'2026-11-16',format:'Reel',theme:'QA Reel',caption:'Reel本文',plannedTime:'18:00',skuIds:[],shots:[{id:'reel-cut',media:'動画',what:'動画カット',count:1,skuIds:[]}],stories:[],revision:1};
+demo.posts.push(reel);showPost(reel.id);document.querySelector('#dayDetail [data-work-meta]').click();
+const reelForm=document.querySelector('#workForm');reelForm.elements.date.value='2026-11-17';reelForm.dispatchEvent(new Event('submit',{bubbles:true,cancelable:true}));
+if(document.querySelector('#workDialog').open||reel.date!=='2026-11-17'||reel.caption!=='Reel本文'||reel.shots[0].what!=='動画カット')throw Error('Reel move failed');
+const before=JSON.stringify(demo.posts),genres=new Set();
+for(let i=0;i<20;i++){const day=dayAdd(TODAY,i+1),idea=makeStories({id:'qa-draft-'+i,date:day,format:'Feed',theme:'QA',primaryAxis:'CUSTOMER_VALUE',skuIds:[],shots:[],stories:[]})[0];
+ if(!idea.researchRequired||idea.skuIds.length||!idea.theme||!idea.text.includes('要確認'))throw Error('Story1 research guard missing');genres.add(idea.genre);}
+if(genres.size<5||JSON.stringify(demo.posts)!==before)throw Error('Story1 variety or saved post protection failed');
+const editorial=window.editorialPlanner.prompt('ten-day');
+if(!editorial.includes('ファッション・カルチャー・旅・生活・社会')||!editorial.includes('未確認の最新情報は事実として書かず')||!editorial.includes('保存済みStory1は変更しません'))throw Error('Story1 prompt policy missing');
+demo.months['2026-11']={date:'2026-11-08',time:'21:00',lineup:[]};
+const nextEditorial=window.editorialPlanner.nextPrompt();
+if(!nextEditorial.includes('ファッション・カルチャー・旅・生活・社会'))throw Error('Next 10-day Story1 policy missing');
+document.body.dataset.qa='PASS';
+}catch(error){document.body.dataset.qa='FAIL:'+error.message;}},0));</script>`;
+const server=http.createServer((req,res)=>{const rel=decodeURIComponent(new URL(req.url,'http://localhost').pathname).replace(/^\//,'')||'index.html';if(rel.includes('..')){res.writeHead(400);res.end();return;}const file=path.join(root,rel);if(!fs.existsSync(file)){res.writeHead(404);res.end();return;}let body=fs.readFileSync(file);if(rel==='index.html'){let html=body.toString('utf8');html=html.replace(/<script src="\.\/firebase-config-v7\.js"><\/script>/,'').replace(/<script type="module" src="\.\/firebase-sync\.js[^"<>]*"><\/script>/,'');assert(!html.includes('src="./firebase-sync.js'));body=Buffer.from(html.replace('</body>',harness+'</body>'));}res.setHeader('Content-Type',rel.endsWith('.js')?'text/javascript; charset=utf-8':'text/html; charset=utf-8');res.end(body);});
+(async()=>{const profile=fs.mkdtempSync(path.join(os.tmpdir(),'todo-v7-move-qa-'));try{await new Promise(resolve=>server.listen(0,'127.0.0.1',resolve));const {stdout}=await run('C:\\Program Files\\Google\\Chrome\\Application\\chrome.exe',['--headless=new','--disable-gpu','--disable-background-networking','--no-first-run','--no-default-browser-check','--user-data-dir='+profile,'--virtual-time-budget=8000','--dump-dom','http://127.0.0.1:'+server.address().port+'/'],{timeout:30000,maxBuffer:12*1024*1024,windowsHide:true});const result=stdout.match(/<body[^>]*data-qa="([^"]+)/)?.[1]||'NO_RESULT';assert.equal(result,'PASS',result);console.log('PASS browser post move');}finally{server.close();if(path.resolve(profile).startsWith(path.resolve(os.tmpdir())+path.sep))fs.rmSync(profile,{recursive:true,force:true,maxRetries:5,retryDelay:200});}})().catch(error=>{console.error('FAIL:',error.message);process.exitCode=1;});

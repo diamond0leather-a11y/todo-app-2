@@ -58,7 +58,10 @@
       if (!validDate(storyDate)) throw Error('Storyの日付を確認してください');
       const slot = story.slot ?? index + 1;
       if (!Number.isSafeInteger(slot) || slot < 1 || slot > 4) throw Error('Story番号を確認してください');
-      assertUnique(state, storyDate, slot, postId, index);
+      // A standalone Story is already the visible record for this day/slot.
+      // Keep the legacy copy in place without treating that existing pair as a move conflict.
+      if (!(state.storyDays || []).some(value => value.date === storyDate && value.slot === slot))
+        assertUnique(state, storyDate, slot, postId, index);
       return {...story, id: story.id || idFactory(), date: storyDate, slot};
     });
     if (new Set(stories.map(story => story.id)).size !== stories.length) throw Error('Story IDが重複しています');

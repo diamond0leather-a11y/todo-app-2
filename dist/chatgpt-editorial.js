@@ -586,13 +586,16 @@ const singlePromptWithOfficialRule=singlePrompt;
 singlePrompt=function(post){return singlePromptWithOfficialRule(post)+'\n\n'+officialThemeRule;};
 const contextBeforeDailyStories=context;
 context=function(scope){const data=contextBeforeDailyStories(scope),from=data.period.from;if(scope==='ten-day')data.period.days=data.period.days.map((day,index)=>({...day,dayNumber:day.dayNumber||((salesCycleBlock()?.dayFrom??1)+index)}));data.storyHistory=V7StoryState.historyEntries(demo,{before:from,limitDays:30}).map(entry=>({date:entry.date,slot:entry.slot,status:entry.status,text:entry.story.text||'',asset:entry.story.asset||'',action:entry.story.action||'',skuIds:entry.story.skuIds||[]}));return data;};
-const promptBeforeDailyStories=prompt;
+ const story1MediaRule='Story1の役割は、ファッション・カルチャー・旅・生活・社会の「今」と、時代を問わず面白い背景を少し深く知る小さなメディアです。商品紹介と革の豆知識に偏らず、商品紹介は主にStory3で扱ってください。ファッション、旅、音楽・若者文化、デザイン・家具・建築、食・生活文化、映画・アニメ、本・出版、美術・地域・生活に関わる経済や社会を長期的に混ぜ、直近のStory1と同じ題材を続けないでください。ファッションを多めにしつつ厳密な比率にはしません。具体的な固有名詞、新しい発見、その背景、今取り上げる理由を入れてください。最近の話題と時代を問わない話を組み合わせてください。戦争・政争など重い政治ニュースを通常の題材として優先しません。未確認の最新情報は事実として書かず「要確認」と示し、存在を確認していないURL・数字・発言を作らないでください。事実確認はChatGPTと利用者が行い、アプリが自動投稿しません。保存済みStory1は変更しません。';
+ const promptBeforeDailyStories=prompt;
 prompt=function(scope){if(scope!=='ten-day')return promptBeforeDailyStories(scope);return promptBeforeDailyStories(scope)
  .replace('投稿不可日はplansへ含めず、投稿可能日はすべてplansに含めてください。','投稿不可日も含む10日間の全日付をplansへ含めてください。投稿を実施するかどうかは利用者が判断します。')
  .replace('Story1：ファッション・カルチャー・生活・社会の「今」を知る。','Story1：見たい・知りたい・役立つ・楽しむにつながる毎日見る理由。')
  .replace('Story1：ファッション・カルチャー・生活・社会の「今」を知る。','Story1：見たい・知りたい・役立つ・楽しむにつながる毎日見る理由。')
  .replace('Story1はメインの要約ではなく、今のファッション・カルチャー・生活・社会を扱う。','Story1はメイン投稿の要約ではなく、その日に見る理由を作る。')
  .replace('Story2は参加・対話で質問箱／アンケート／二択／クイズを使い分け','Story2は自然な会話を基本とし、必要な日だけ質問箱／アンケート／二択／クイズを使い分け')
- .replace('\n\n編集コンテキスト：\n','\n\n【毎日5件の企画・最優先】投稿不可日も含む対象期間の10日すべてを日付順にplansへ含めてください。毎日FeedまたはReelのどちらか1件だけを提案し、「投稿なし」の企画、同日のFeedとReelの併記、企画の欠落を認めません。各日のメイン本文は500文字以上、メイン投稿の撮影指示をshotsに入れてください。毎日Story1〜4を各1件、合計4件提案し、各枠にtext・asset・action・materialMode・skuIdsを含めます。Story1は毎日見る理由、Story2は会話（毎日質問しない）、Story3は月間販売SKUの補完、Story4はその日のメイン投稿から次の行動への自然な導線です。正式100テーマは番号順に消費せず、引き出しとして使ってください。storyHistoryには投稿しなかった日を含む過去Storyがあります。投稿不可日と「今日は投稿しない」は実際に投稿するかの判断にのみ使い、企画は消さず、保存・採用は利用者が決めます。既存の確定済み企画は上書きしません。\n\n編集コンテキスト：\n');};
+  .replace('\n\n編集コンテキスト：\n','\n\n【毎日5件の企画・最優先】投稿不可日も含む対象期間の10日すべてを日付順にplansへ含めてください。毎日FeedまたはReelのどちらか1件だけを提案し、「投稿なし」の企画、同日のFeedとReelの併記、企画の欠落を認めません。各日のメイン本文は500文字以上、メイン投稿の撮影指示をshotsに入れてください。毎日Story1〜4を各1件、合計4件提案し、各枠にtext・asset・action・materialMode・skuIdsを含めます。Story1は毎日見る理由、Story2は会話（毎日質問しない）、Story3は月間販売SKUの補完、Story4はその日のメイン投稿から次の行動への自然な導線です。正式100テーマは番号順に消費せず、引き出しとして使ってください。storyHistoryには投稿しなかった日を含む過去Storyがあります。投稿不可日と「今日は投稿しない」は実際に投稿するかの判断にのみ使い、企画は消さず、保存・採用は利用者が決めます。既存の確定済み企画は上書きしません。\n\n'+story1MediaRule+'\n\n編集コンテキスト：\n');};
+ const singlePromptBeforeStory1Media=singlePrompt;
+ singlePrompt=function(post){return singlePromptBeforeStory1Media(post)+'\n\n'+story1MediaRule;};
 window.editorialPlanner={context,prompt,nextContext:nextEditorialContext,nextPrompt:nextEditorialPrompt,extract,validate,warnings,singleContext,singlePrompt,validateSingle,periodReview};refreshWork();
 })();
