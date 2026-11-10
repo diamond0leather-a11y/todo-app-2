@@ -239,7 +239,7 @@ showPost=function(id){
     const card=document.createElement('article');
     card.className='story-card';
     card.dataset.v7StorySlot=String(slot);
-    card.innerHTML=`<strong>Story ${slot}｜${html(story.purpose||STORY_ROLES[slot-1]||'')}</strong><p class="tiny muted">${html(story.date)} の独立Story</p><h4>${html(story.theme||'')}</h4><p class="story-text">${html(story.text||'')}</p><p class="tiny">${html(story.asset||'')}</p><p>見た方に：${html(story.action||'')}</p><div class="actions"><button class="ghost small" data-v7-story-edit="${html(story.id)}|${index}">編集</button><button class="ghost small" data-v7-story-response="${html(story.id)}|${index}">反応を記録</button></div>`;
+    card.innerHTML=`<strong>Story ${slot}｜${html(story.purpose||STORY_ROLES[slot-1]||'')}</strong><p class="tiny muted">${html(story.date)} の独立Story</p><h4>${html(story.theme||'')}</h4><p class="story-text">${html(story.text||'')}</p><p class="tiny">${html(story.asset||'')}</p><p>見た方に：${html(story.action||'')}</p>${slot===1&&story.researchSources?.length?`<details><summary>出典・確認状態</summary>${story.researchSources.map(source=>`<p class="tiny" style="overflow-wrap:anywhere">${html(source.name||source.title||'出典')}：${html(source.url||'URL未設定')}</p>`).join('')}<p class="tiny">${html(story.verificationStatus||'未設定')}</p></details>`:''}<div class="actions"><button class="ghost small" data-v7-story-edit="${html(story.id)}|${index}">編集</button><button class="ghost small" data-v7-story-response="${html(story.id)}|${index}">反応を記録</button></div>`;
     const next=[...section.querySelectorAll(':scope > .story-card')].find(existing=>{
       const position=existing.dataset.v7StorySlot?Number(existing.dataset.v7StorySlot):cards.indexOf(existing)+1;
       return position>slot;

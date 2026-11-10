@@ -280,6 +280,58 @@ window.todo2SyncBridge.swapPosts=async(nextPosts)=>{
  }catch(error){status('2件の交換を確認できませんでした。投稿を開き直して確認してください。',true);throw error;}
  finally{if(generation===authGeneration)saving=false;}
 };
+// A Story1 review changes only state/settings.storyDays, in one conditional transaction.
+window.todo2SyncBridge.saveStory1Selection=async(changes)=>{
+ if(!currentUser||!initialized||applyingRemote||saving||pendingWrites||writeTimer||writeFailed||pendingRaw())throw Error('共有保存中の編集があります。完了後にStory1を更新してください。');
+ if(!Array.isArray(changes)||!changes.length||new Set(changes.map(change=>change.date)).size!==changes.length)throw Error('更新するStory1の日付を確認してください。');
+ const generation=authGeneration,uid=currentUser.uid,local=window.todo2SyncBridge.read(),key='state/settings',base=localBaseline.get(key),ref=doc(workspace,'state','settings');
+ if(!base||!same(base.value,splitState(local).get(key)?.value))throw Error('共有状態が変わりました。再読み込みして確認してください。');
+ const dates=new Set(changes.map(change=>change.date));
+ const localPosts=(local.posts||[]).filter(post=>!post.deleted&&dates.has(post.date));
+ const postSnapshot=await getDocs(collection(workspace,'posts'));
+ const remotePosts=postSnapshot.docs.map(snap=>snap.data()?.value).filter(post=>post&&!post.deleted&&dates.has(post.date));
+ if(!same(remotePosts.map(post=>post.id).sort(),localPosts.map(post=>post.id).sort()))throw Error('対象日の投稿が変わりました。再読み込みして確認してください。');
+ const voiceSnapshot=await getDocs(collection(workspace,'voices'));
+ if(generation!==authGeneration||pendingWrites||writeTimer||writeFailed||pendingRaw()||!same(local,window.todo2SyncBridge.read()))throw Error('共有保存中に状態が変わりました。開き直してください。');
+ for(const change of changes){
+  const current=(local.storyDays||[]).find(story=>story.date===change.date&&story.slot===1);
+  if((local.storyDays||[]).filter(story=>story.date===change.date&&story.slot===1).length>1)throw Error(`${change.date}のStory1が重複しています。`);
+  if(current?.shotId&&current.asset!==change.story.asset)throw Error(`${change.date}の撮影済み情報を守るため、素材が変わるStory1は個別に確認してください。`);
+  if(voiceSnapshot.docs.some(snap=>{const voice=snap.data()?.value,source=voice?.sourceStory;return source?.storyId===current?.id||source?.postId&&localPosts.some(post=>post.id===source.postId&&post.date===change.date)&&Number(source.slot)===1;}))throw Error(`${change.date}のStory1には反応があるため更新できません。`);
+ }
+ const postEntries=localPosts.map(post=>({post,ref:doc(workspace,'posts',safeId(post.id)),base:localBaseline.get('posts/'+safeId(post.id))}));
+ if(postEntries.some(entry=>!entry.base||!same(entry.base.value,entry.post)))throw Error('対象日の投稿が変更されています。開き直してください。');
+ saving=true;status('Story1を共有保存中…');
+ try{
+  const saved=await runTransaction(db,async tx=>{
+   const settings=await tx.get(ref),postDocs=[];
+   for(const entry of postEntries)postDocs.push(await tx.get(entry.ref));
+   if(generation!==authGeneration)throw Error('session-ended');
+   const current=settings.exists()?settings.data():null;
+   if(!current||!same(current.value,base.value))throw Error('sync-conflict');
+   for(let i=0;i<postEntries.length;i++){
+    const row=postDocs[i].exists()?postDocs[i].data():null;
+    if(!row||!same(row.value,postEntries[i].base.value)||row.value?.actualAt||row.value?.actualSnapshot||row.value?.noPostConfirmedAt||row.value?.posted||row.value?.status==='posted')throw Error('sync-conflict');
+   }
+   const next=clean(current.value);next.storyDays||=[];
+   for(const {date,story} of changes){
+    const index=next.storyDays.findIndex(value=>value.date===date&&value.slot===1),old=index>=0?next.storyDays[index]:null;
+    if(old&&(old.reactionId||old.actualAt||old.postedAt||old.publishedAt||old.performedAt||old.completedAt||old.posted||old.performed||old.status==='posted'||old.status==='done'))throw Error('sync-conflict');
+    const adopted={...old,category:story.category,title:story.title,theme:story.title,text:story.text,action:story.action,asset:story.asset,materialMode:story.materialMode,skuIds:clean(story.skuIds),researchSources:clean(story.researchSources),verificationStatus:story.verificationStatus,id:old?.id||crypto.randomUUID(),date,slot:1,manual:true,editorialSource:'story1-verified-review'};
+    if(index>=0)next.storyDays[index]=adopted;else next.storyDays.push(adopted);
+   }
+   storyDayEntries(next.storyDays);
+   if(new TextEncoder().encode(JSON.stringify(next)).length>900000)throw Error('Story保存文書の容量が上限に近いため停止しました。');
+   const updated={...current,value:next,version:(current.version||0)+1,updatedAt:serverTimestamp(),updatedBy:uid};
+   tx.set(ref,updated);return {...updated,updatedAt:undefined,updatedBy:undefined};
+  });
+  if(generation!==authGeneration)throw Error('session-ended');
+  remoteDocs.set(key,saved);localBaseline.set(key,clean(saved));
+  const next=clean(local);next.storyDays=clean(saved.value.storyDays);window.todo2SyncBridge.replace(next);
+  status('Story1を共有保存しました');
+ }catch(error){status('Story1の共有保存を確認できませんでした。再読み込みして結果を確認してください。',true);throw error;}
+ finally{if(generation===authGeneration)saving=false;}
+};
 document.addEventListener('close',()=>applyRemoteSoon(),true);
 
 function showPendingRecovery(entry,user,generation){
