@@ -2291,17 +2291,6 @@ renderHome=function(){
   notices.insertAdjacentHTML('beforeend',`<button type="button" class="eventline" data-next-plan-coverage><strong>次の10日プランを準備</strong><small>${html(coverage.from)}〜${html(coverage.to)} · 不足 ${coverage.missing.length}日</small></button>`);
  }else if(!notices.querySelector('button,.notice'))notices.hidden=true;
 };
-const coveragePlanRender=renderPlan;
-renderPlan=function(){
- coveragePlanRender();
- const coverage=nextPlanCoverage(),periodCard=dx('#planPeriodCard');
- if(!coverage||!periodCard)return;
- const detail=document.createElement('div');detail.id='nextPlanCoverage';detail.className='next-plan-period';
- detail.innerHTML=`<strong>次期 ${html(coverage.from)}〜${html(coverage.to)}の保存済み5枠</strong>`+
-  (coverage.missing.length?`<p>不足 ${coverage.missing.length}日：${coverage.missing.map(day=>html(day.date)+'（'+html(day.missing.join('・'))+'）').join('、')}</p>`:'<p>不足なし。5枠OKの日は再作成不要です。</p>')+
-  (coverage.duplicate.length?`<p>重複 ${coverage.duplicate.length}日：${coverage.duplicate.map(day=>html(day.date)+'（'+html(day.duplicate.join('・'))+'）').join('、')}</p>`:'');
- periodCard.append(detail);
-};
 document.addEventListener('click',event=>{
  if(!event.target.closest('[data-next-plan-coverage]'))return;
  go('plan');
