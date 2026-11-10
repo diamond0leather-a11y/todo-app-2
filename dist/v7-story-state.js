@@ -71,6 +71,8 @@
     const source=(state.posts||[]).find(post=>post.id===postId&&!post.deleted);
     const target=(state.posts||[]).find(post=>post.id!==postId&&!post.deleted&&post.date===date);
     if(!source||!target||source.date===target.date)throw Error('交換する2件の投稿を確認してください');
+    if((state.posts||[]).filter(post=>!post.deleted&&(post.date===source.date||post.date===target.date)).length!==2)
+      throw Error('同じ日に複数の投稿があります。交換を中止しました');
     for(const post of [source,target]){
       if(post.actualAt||post.actualSnapshot||post.noPostConfirmedAt||post.posted||post.status==='posted'||
         Object.keys(state.records||{}).some(key=>key.startsWith(post.id+'|')))

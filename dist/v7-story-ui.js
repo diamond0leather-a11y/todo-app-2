@@ -660,6 +660,42 @@ function v7RenderPostShotChecks(id){
 }
 const v7ShotDetailShowPost=showPost;
 showPost=function(id){v7ShotDetailShowPost(id);v7RenderPostShotChecks(id);};
+const v7DateDetailShowPost=showPost;
+showPost=function(id){
+  v7DateDetailShowPost(id);
+  const root=dx('#dayDetail');if(!root)return;
+  const copy=root.querySelector('.v7-post-copy'),meta=root.querySelector('[data-work-meta]');
+  if(copy&&!root.querySelector('[data-v7-post-date]')){const heading=copy.querySelector(':scope > h3');(heading||copy).insertAdjacentHTML(heading?'afterend':'afterbegin',`<button type="button" class="secondary full" data-v7-post-date="${html(id)}">日程変更</button>`);}
+  if(meta){meta.textContent='商品・形式などを編集';const section=meta.closest('.v7-post-block');if(section&&!meta.closest('details')){const details=document.createElement('details');details.innerHTML='<summary>その他の設定</summary>';meta.replaceWith(details);details.append(meta);section.append(details);}}
+};
+function v7SwapPreview(post){
+  const cuts=(post.shots||[]).map((shot,index)=>`<li>${index+1}. ${html(shot.what||'撮影内容未設定')}</li>`).join('');
+  const excerpt=String(post.caption||'本文未設定').slice(0,80);
+  return `<article class="card"><strong>${html(post.date)}｜${html(post.format||'Feed')}｜${html(post.theme||'')}</strong><p>${html(excerpt)}${String(post.caption||'').length>80?'…':''}</p><details><summary>本文・撮影内容をすべて見る</summary><p class="exact">${html(post.caption||'本文未設定')}</p><strong>撮影内容</strong>${cuts?`<ol>${cuts}</ol>`:'<p>未設定</p>'}</details></article>`;
+}
+function v7OpenPostDate(id){
+  const source=demo.posts.find(post=>post.id===id&&!post.deleted);if(!source)return;
+  dx('#dayDialog').close();
+  openForm('日程変更',formInput('交換先の日付','swapDate',source.date,'date',true)+'<div id="v7SwapPreview" aria-live="polite"></div>',form=>{
+    const date=String(form.get('swapDate')||''),current=demo.posts.find(post=>post.id===id&&!post.deleted),target=demo.posts.find(post=>post.id!==id&&!post.deleted&&post.date===date);
+    if(!current||!target||date===current.date)throw Error('交換先の日付と投稿を確認してください。');
+    if(demo.posts.filter(post=>!post.deleted&&(post.date===current.date||post.date===date)).length!==2)throw Error('同じ日に複数の投稿があります。交換を中止しました。');
+    const pair=V7StoryState.preparePostSwap(demo,id,date);
+    if(!confirm(`${current.date}の「${current.theme}」と${date}の「${target.theme}」を交換します。Story1〜4は元の日付に残します。よろしいですか？`))return false;
+    if(!window.todo2SyncBridge?.swapPosts)throw Error('共有保存に接続できません。交換は行っていません。');
+    const dialog=dx('#workDialog'),button=dx('#workForm .save-foot button'),error=dx('#workError');
+    button.disabled=true;button.textContent='交換を保存中…';error.textContent='2件の共有保存を確認しています。';
+    window.todo2SyncBridge.swapPosts(pair).then(()=>{dialog.close();refreshWork();showPost(id);toast('2件の日程を交換しました');})
+      .catch(()=>{error.textContent='交換の保存を確認できませんでした。投稿を開き直して確認してください。';})
+      .finally(()=>{button.disabled=false;button.textContent='2件を交換する';});
+    return false;
+  });
+  const input=dx('#workForm [name="swapDate"]'),preview=dx('#v7SwapPreview');
+  dx('#workForm .save-foot button').textContent='2件を交換する';
+  const update=()=>{const target=demo.posts.find(post=>post.id!==id&&!post.deleted&&post.date===input.value);preview.innerHTML=target?`<p>交換後：${html(source.date)}に次の投稿、${html(target.date)}に元の投稿を表示します。Storyは移動しません。</p>${v7SwapPreview(source)}${v7SwapPreview(target)}`:'<p class="notice">交換先の日付にFeed・Reelの予定がありません。</p>';};
+  input.addEventListener('change',update);update();
+}
+document.addEventListener('click',event=>{const button=event.target.closest('[data-v7-post-date]');if(!button)return;event.preventDefault();event.stopImmediatePropagation();v7OpenPostDate(button.dataset.v7PostDate);},true);
 document.addEventListener('change',event=>{
   const input=event.target.closest?.('[data-v7-post-shot]');
   if(!input)return;
