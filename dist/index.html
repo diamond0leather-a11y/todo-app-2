@@ -1703,30 +1703,24 @@ function discoveryStory(p,index){let pool=demo.skus.filter(s=>!s.deleted&&!p.sku
 function mainGuide(p){const reel=p.format==='Reel',topic=p.topicGroup;const lead=p.hook||p.takeaway||p.theme;const focus=topic==='AGING'?'使う前と後、どこが変わったでしょう？':topic==='CRAFT'?'完成品だけでは見えない工程を、ひとつご紹介します。':topic==='CARE'?'迷ったときに見返したいポイントを、今日の投稿にまとめています。':topic==='LEATHER'||topic==='ANIMAL'?'その違いは、どこから生まれるのでしょう？':p.primaryAxis==='BUSINESS'?'選ぶときに知っていただきたいことを、ご紹介しています。':'';const medium=reel?'動画で、'+(topic==='CRAFT'?'手の動きと工程':topic==='AGING'?'角度を変えた表情': '動きや見え方')+'を確かめてください。':p.format==='Carousel'?'複数の写真を順に見ながら、違いやポイントを比較できます。':'写真と本文で、今日のポイントをご覧ください。';const c=salesContext(p.date),sale=p.primaryAxis==='BUSINESS'&&c.next? '\n'+c.next.date+' '+c.next.time+' オンライン販売。対象商品と選ぶ理由は今日の投稿へ。':'';return {theme:p.theme,parentId:p.parentId,topicGroup:p.topicGroup,text:lead+'\n'+(p.takeaway||focus)+'\n'+medium+sale,asset:reel?'動画：今日のReelから興味を引く1場面を切り出す':'写真：今日の投稿の比較・要点が分かる画像',skuIds:[...p.skuIds],action:'今日の'+(formats[p.format]||'投稿')+'を開く',participatory:false,shotId:p.shots[0]?.id};}
 makeStories=function(p){const history=storyHistory(p.date),index=Math.abs(dayDiff(p.date,'2026-01-01'));const reaction=unansweredReaction(p.date);let s2;if(reaction){const answer=reactionReply(reaction);s2={theme:'お寄せいただいた声への返答',text:answer.text,needsAnswer:answer.needsAnswer,kind:'返答',reactionId:reaction.id,parentId:reaction.parentId||null,topicGroup:reaction.parentId?ALL_OFFICIAL_TOPICS.find(t=>t.id===reaction.parentId)?.group:null,asset:'画像：記録した回答・結果を紹介（個人情報と掲載許可を確認）',skuIds:[],action:'返答を読み、補足があればDMする',participatory:false};}else{const candidates=STORY_DIALOGUES.filter(s=>s.parentId!==p.parentId&&s.topicGroup!==p.topicGroup);const previous=history.find(s=>s.slot===2);const scored=candidates.map((s,i)=>({s,score:history.filter(h=>h.theme===s.theme).length*3+(previous?.kind===s.kind?2:0)+((i-index%candidates.length+candidates.length)%candidates.length)/10})).sort((a,b)=>a.score-b.score);s2={...structuredClone(scored[0].s),skuIds:[],participatory:true};}const s3=discoveryStory(p,index),s4=mainGuide(p);const last=history.find(s=>s.slot===1),others=[s2,s3,s4].flatMap(storyKeywords);const candidates=STORY_IDEAS.filter(k=>k.number!==Number(p.parentId?.replace('official-',''))&&topicGroup(k.number)!==p.topicGroup&&topicGroup(k.number)!==s2.topicGroup);const ranked=candidates.map((k,i)=>({k,score:history.filter(s=>s.parentId==='official-'+String(k.number).padStart(2,'0')).length*3+(last?.topicGroup===topicGroup(k.number)?10:0)+(storyKeywords(k).some(t=>others.includes(t))?8:0)+((i-index%candidates.length+candidates.length)%candidates.length)/10})).sort((a,b)=>a.score-b.score);const k=ranked[0].k;const s1={theme:k.theme,parentId:'official-'+String(k.number).padStart(2,'0'),topicGroup:topicGroup(k.number),text:k.text,asset:k.asset,action:'手元の革と見比べる・話の種にする',skuIds:[],participatory:false,researchRequired:!!k.researchRequired,researchBrief:k.researchRequired?'正式テーマの最新資料・出典・確認日を調べてから、1枚で伝える内容を作成。未確認の本文は作りません。':null};return [s1,s2,s3,s4].map((s,i)=>({...s,parentId:s.parentId?.startsWith('official-')&&!s.reactionId?null:s.parentId,topicGroup:s.parentId?.startsWith('official-')&&!s.reactionId?null:s.topicGroup,slot:i+1,purpose:STORY_ROLES[i],materialMode:s.materialMode||'過去素材使用可',storySpecVersion:4}));};
 function currentStoryDraft(p){if(p.editorialSource==='chatgpt-import')return {stories:p.stories,revision:p.revision};const signature=JSON.stringify([p.revision,demo.reactions,demo.months,p.stories]);let draft=storyDrafts.get(p.id);if(!draft||draft.signature!==signature){draft={signature,stories:makeStories(p),revision:p.revision};storyDrafts.set(p.id,draft);}return draft;}
-// 新しいStory1案だけに適用。固有名詞は調査の入口とし、未確認の説明文を完成稿にしない。
-const STORY1_MEDIA_TOPICS=[
- ['ファッション','Chloé「Paddington」','昔のバッグの形を今の暮らしに合わせてどう変えたのか、公式資料で確かめる。'],
- ['ファッション','Prada「Re-Nylon」','素材の出自と使い終えた後の考え方を、公式資料で比べる。'],
- ['ファッション','トレンチコートとBurberry','定番の形が時代ごとにどう着られてきたか、資料で確かめる。'],
- ['ファッション','Vogueのコレクション写真','同じ色が服と小物でどう違って見えるか、公開写真から探る。'],
- ['ファッション','デニムとLevi’s','身近な服が長く使われる理由を、資料と実物から探る。'],
- ['旅','京都・宮川町','街の景色と建築の関係を、現地資料から探る。'],
- ['旅','瀬戸内の島々','移動する道と地域の景色の見え方を、観光資料で確かめる。'],
- ['音楽・若者文化','シティポップのレコードジャケット','音楽の印象を色と文字でどう伝えるか、実例から探る。'],
- ['デザイン・家具・建築','VitraのWater Garden','水辺を置くことで公共の場所の使い方がどう変わるか、公式資料で確かめる。'],
- ['デザイン・家具・建築','柳宗理のバタフライスツール','形の名前と実際の座り方の関係を、資料から探る。'],
- ['食・生活文化','喫茶店のクリームソーダ','色と器が飲み物の楽しさをどう変えるか、実例から探る。'],
- ['食・生活文化','日本の米の週次価格','値札の印象と公表データがどう違うか、農林水産省の資料で確かめる。'],
- ['映画・アニメ','スタジオジブリの背景美術','街や部屋の描写が物語をどう支えるか、公開資料から探る。'],
- ['本・出版','岩波文庫の装丁','小さな本の表紙が読み手に何を伝えるか、実物と出版社資料で確かめる。'],
- ['美術・アート','国立新美術館の展示空間','作品を見る前の建物の体験にも目を向け、公式資料で確かめる。'],
- ['その他・経済・社会','家計調査の食料支出','支払額と物価を考慮した数字の違いを、総務省の資料で確かめる。']
-];
+// 新しいStory1だけの調査テーマ。ニュースや出典を取得したふりはせず、確認前の企画案を作る。
+const STORY1_MEDIA_BEATS={
+ 'ファッション':['バッグの形と持ち方','服と小物の色合わせ','素材の見せ方','街で見る装い','定番服の着こなし'],
+ 'デザイン・建築':['街のベンチ','部屋の明かり','建物の入口','家具の曲線','案内表示のデザイン'],
+ 'AI・テクノロジー':['スマホの翻訳','生成AIと日常の検索','写真の整理','身近なデジタル道具'],
+ '音楽・映画・カルチャー':['音楽のジャケット','映画の小道具','本の装丁','アニメの背景','街の音'],
+ '暮らし・日常':['旅の持ち物','食卓の器','街の看板','毎日の買い物','地域の小さな工夫']
+};
+const STORY1_MEDIA_SEQUENCE=['ファッション','デザイン・建築','ファッション','AI・テクノロジー','デザイン・建築','音楽・映画・カルチャー','ファッション','デザイン・建築','暮らし・日常','AI・テクノロジー','ファッション','デザイン・建築','音楽・映画・カルチャー','暮らし・日常'];
 const mediaStoryDraft=makeStories;
 makeStories=function(post){
  const stories=mediaStoryDraft(post),recent=storyHistory(post.date).filter(story=>story.slot===1).slice(0,14),index=Math.abs(dayDiff(post.date,'2026-01-01'));
- const topic=STORY1_MEDIA_TOPICS.map(([genre,theme,angle],i)=>({genre,theme,angle,score:recent.filter(story=>story.theme===theme).length*20+recent.filter(story=>story.genre===genre).length*3+(recent[0]?.genre===genre?5:0)+((i-index%STORY1_MEDIA_TOPICS.length+STORY1_MEDIA_TOPICS.length)%STORY1_MEDIA_TOPICS.length)/100})).sort((a,b)=>a.score-b.score)[0];
- stories[0]={slot:1,purpose:STORY_ROLES[0],genre:topic.genre,theme:topic.theme,text:`企画案｜${topic.theme}。${topic.angle} なぜ今面白いのかを確かめ、事実と見方を分けて伝える。要確認。`,asset:'一次資料と画像の使用条件を確認して、題材に合う写真1枚を準備',action:'確かめた背景から新しい発見をひとつ持ち帰る',skuIds:[],participatory:false,materialMode:'新規撮影必要',researchRequired:true,researchBrief:'固有名詞・事実・公開日・画像の使用条件を確認する。未確認の数値・発言・URLは書かない。',storySpecVersion:4};
+ const preferred=STORY1_MEDIA_SEQUENCE[index%STORY1_MEDIA_SEQUENCE.length],genres=Object.keys(STORY1_MEDIA_BEATS);
+ const genre=genres.slice().sort((a,b)=>((a===preferred?-5:0)+recent.filter(s=>(s.genre||s.category)===a).length*2+(recent[0]&&(recent[0].genre||recent[0].category)===a?4:0))-((b===preferred?-5:0)+recent.filter(s=>(s.genre||s.category)===b).length*2+(recent[0]&&(recent[0].genre||recent[0].category)===b?4:0)))[0];
+ const beats=STORY1_MEDIA_BEATS[genre],theme=beats.slice().sort((a,b)=>recent.filter(s=>s.theme===a).length-recent.filter(s=>s.theme===b).length||((beats.indexOf(a)-index%beats.length+beats.length)%beats.length)-((beats.indexOf(b)-index%beats.length+beats.length)%beats.length))[0];
+ const evergreen=index%4===0,opening=['意外と知らない、','見慣れたものにも、','なぜ今、','ちょっと気になる、'][index%4];
+ const text=`${opening}${theme}の見方。${evergreen?'長く親しまれる理由':'直近の話題と暮らしの接点'}を資料で確かめ、発見を一つ伝えたい。要確認。`;
+ stories[0]={slot:1,purpose:STORY_ROLES[0],genre,theme,text,asset:'出典と画像の使用条件を確認し、題材に合う写真1枚を準備',action:'面白かった発見を誰かに話す',skuIds:[],participatory:false,materialMode:'新規撮影必要',researchRequired:true,researchSources:[],verificationStatus:'unverified',researchBrief:`${evergreen?'時代を問わず面白い背景':'企画時点から直近1か月以内の話題'}を、国内外の公式資料・信頼できる報道で調べる。固有名詞、発表日、出来事の日、確認日を分けて記録する。事実と画像の使用条件を確認するまで完成原稿にしない。URL・数字・発言は創作しない。`,storySpecVersion:4};
  return stories;
 };
 function storyPollRequired(s,i){return i===1&&/アンケート|二択|どちら|どっち|選んで/.test([s.kind,s.text,s.action].join(' '));}
@@ -1879,7 +1873,7 @@ function correctNoPost(id){const post=demo.posts.find(p=>p.id===id&&p.noPostConf
 document.addEventListener('click',e=>{const correction=e.target.closest('[data-work-no-post-correct]');if(correction){e.preventDefault();e.stopImmediatePropagation();correctNoPost(correction.dataset.workNoPostCorrect);return;}const button=e.target.closest('[data-work-review-date]');if(!button)return;e.preventDefault();e.stopImmediatePropagation();reviewDate=button.dataset.workReviewDate;homeReviewFilter=null;renderReviewWork();const noPost=demo.posts.filter(p=>p.noPostConfirmedAt&&!p.deleted&&noPostCalendarDate(p)===reviewDate);if(noPost.length===1){correctNoPost(noPost[0].id);return;}const saved=reviewCalendarTasks(reviewDate).filter(t=>t.stage==='7d'&&reviewRecordForTask(t));if(saved.length===1)editRecord(saved[0].key);else dx('#todayRecordsWork').scrollIntoView({block:'start'});},true);
 </script>
 <script src="./period-planner.js"></script>
-<script src="./chatgpt-editorial.js?story1-review=20261110"></script>
+<script src="./chatgpt-editorial.js?story1-media=20261111"></script>
 <script>
 let firebaseSyncApplying=false;const firebaseLocalPersist=persist;persist=function(){if(!firebaseSyncApplying&&window.todo2SyncBridge?.stage)window.todo2SyncBridge.stage(window.todo2SyncBridge.read());firebaseLocalPersist();if(!firebaseSyncApplying&&window.todo2SyncBridge)window.dispatchEvent(new CustomEvent('todo2:local-save',{detail:{state:window.todo2SyncBridge.read()}}));};
 window.todo2SyncBridge={read:()=>structuredClone(demo),emptyState:()=>structuredClone(emptyV7State()),replace:state=>{firebaseSyncApplying=true;try{demo=structuredClone(state);try{localStorage.setItem(MOCK_KEY,JSON.stringify(demo));}catch{}storyDrafts?.clear?.();refreshWork();}finally{firebaseSyncApplying=false;}}};
