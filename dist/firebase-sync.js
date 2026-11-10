@@ -255,6 +255,31 @@ window.todo2SyncBridge.flush=async(state,postIds=[])=>{
   }
  }}catch(error){writeFailed=true;status('共有データへの保存を確認できませんでした。再試行してください。',true);throw error;}
 };
+// Exchange two planned posts in one Firestore transaction. Do not stage a partial local edit.
+window.todo2SyncBridge.swapPosts=async(nextPosts)=>{
+ if(!currentUser||!initialized||applyingRemote||saving||pendingWrites||writeTimer||writeFailed||pendingRaw())throw Error('共有保存中の編集があります。完了後に交換してください。');
+ if(!Array.isArray(nextPosts)||nextPosts.length!==2||nextPosts[0].id===nextPosts[1].id)throw Error('交換する2件を確認してください。');
+ const generation=authGeneration,uid=currentUser.uid,local=window.todo2SyncBridge.read();
+ const entries=nextPosts.map(value=>{const key='posts/'+safeId(value.id),base=localBaseline.get(key),current=local.posts.find(post=>post.id===value.id&&!post.deleted);if(!base||!current||!same(base.value,current)||current.actualAt||current.actualSnapshot||current.noPostConfirmedAt||current.posted||current.status==='posted'||Object.keys(local.records||{}).some(record=>record.startsWith(value.id+'|')))throw Error('投稿の保存状態を確認できません。交換を中止しました。');return {key,base,current,value,ref:doc(workspace,'posts',safeId(value.id))};});
+ if(entries[0].current.date!==entries[1].value.date||entries[1].current.date!==entries[0].value.date)throw Error('交換する日付を確認してください。');
+ saving=true;status('2件の投稿を交換中…');
+ try{
+  const saved=await runTransaction(db,async tx=>{
+   const snapshots=[];
+   for(const entry of entries)snapshots.push(await tx.get(entry.ref));
+   if(generation!==authGeneration)throw Error('session-ended');
+   const updates=entries.map((entry,index)=>{const current=snapshots[index].exists()?snapshots[index].data():null;if(!current||current.deleted||!same(current.value,entry.base.value)||current.value?.actualAt||current.value?.actualSnapshot||current.value?.noPostConfirmedAt||current.value?.posted||current.value?.status==='posted')throw Error('sync-conflict');return {...current,entityId:entry.value.id,value:clean(entry.value),version:(current.version||0)+1,updatedAt:serverTimestamp(),updatedBy:uid};});
+   updates.forEach((value,index)=>tx.set(entries[index].ref,value));
+   tx.set(workspace,{updatedAt:serverTimestamp(),updatedBy:uid},{merge:true});
+   return updates.map(value=>({...value,updatedAt:undefined,updatedBy:undefined}));
+  });
+  if(generation!==authGeneration)throw Error('session-ended');
+  const next=clean(local);for(const value of nextPosts){const index=next.posts.findIndex(post=>post.id===value.id);next.posts[index]=clean(value);}
+  saved.forEach((value,index)=>{remoteDocs.set(entries[index].key,value);localBaseline.set(entries[index].key,clean(value));});
+  window.todo2SyncBridge.replace(next);status('2件の投稿を共有保存しました');
+ }catch(error){status('2件の交換を確認できませんでした。投稿を開き直して確認してください。',true);throw error;}
+ finally{if(generation===authGeneration)saving=false;}
+};
 document.addEventListener('close',()=>applyRemoteSoon(),true);
 
 function showPendingRecovery(entry,user,generation){

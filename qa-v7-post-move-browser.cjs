@@ -8,7 +8,7 @@ const {promisify}=require('node:util');
 const {execFile}=require('node:child_process');
 const run=promisify(execFile);
 const root=path.join(__dirname,'dist');
-const harness=`<script>window.addEventListener('load',()=>setTimeout(()=>{try{
+const harness=`<script>window.addEventListener('load',()=>setTimeout(async()=>{try{
 const from='2026-11-12',to='2026-11-13';
 const original={id:'qa-move',date:from,format:'Feed',theme:'QA',derivedTheme:'QA',caption:'本文を保持',plannedTime:'18:00',actualAt:'2026-11-12T10:00:00+09:00',skuIds:[],shots:[{id:'qa-cut',media:'写真',what:'撮影を保持',count:1,skuIds:[]}],stories:[1,2,3,4].map(slot=>({id:'legacy-'+slot,slot,date:from,text:'Story '+slot,skuIds:[],asset:'素材',action:'見る'})),revision:1};
 demo.posts=[original];demo.storyDays=[1,2,3,4].map(slot=>({id:'canonical-'+slot,slot,date:from,text:'Story '+slot,skuIds:[],asset:'素材',action:'見る'}));demo.reactions=[];demo.records={'qa-move|7d':{postId:'qa-move',stage:'7d',likes:3}};
@@ -22,12 +22,22 @@ if(demo.posts.length!==1||demo.storyDays.some(s=>s.date!==from)||original.storie
 if(JSON.parse(localStorage.getItem(MOCK_KEY)).posts[0].date!==to)throw Error('reload lost move');
 demo.posts.push({id:'occupied',date:'2026-11-14',stories:[],skuIds:[]});showPost(original.id);document.querySelector('#dayDetail [data-work-meta]').click();
 const blocked=document.querySelector('#workForm');blocked.elements.date.value='2026-11-14';blocked.dispatchEvent(new Event('submit',{bubbles:true,cancelable:true}));
-if(original.date!==to||!document.querySelector('#workError')?.textContent.includes('すでに投稿'))throw Error('occupied date overwritten');
+if(original.date!==to||!document.querySelector('#workError')?.textContent.includes('投稿済み・評価済み'))throw Error('posted swap was not blocked');
 document.querySelector('#workDialog').close();
 const reel={id:'qa-reel',date:'2026-11-16',format:'Reel',theme:'QA Reel',caption:'Reel本文',plannedTime:'18:00',skuIds:[],shots:[{id:'reel-cut',media:'動画',what:'動画カット',count:1,skuIds:[]}],stories:[],revision:1};
 demo.posts.push(reel);showPost(reel.id);document.querySelector('#dayDetail [data-work-meta]').click();
 const reelForm=document.querySelector('#workForm');reelForm.elements.date.value='2026-11-17';reelForm.dispatchEvent(new Event('submit',{bubbles:true,cancelable:true}));
 if(document.querySelector('#workDialog').open||reel.date!=='2026-11-17'||reel.caption!=='Reel本文'||reel.shots[0].what!=='動画カット')throw Error('Reel move failed');
+reel.stories=[1,2,3,4].map(slot=>({id:'reel-story-'+slot,date:reel.date,slot,text:'Reel Story '+slot,skuIds:[]}));
+const other={id:'qa-other',date:'2026-11-18',format:'Feed',theme:'別の投稿',caption:'B本文',plannedTime:'18:00',skuIds:[],shots:[{id:'b-cut',media:'写真',what:'B撮影',count:1,skuIds:[]}],stories:[1,2,3,4].map(slot=>({id:'b-story-'+slot,date:'2026-11-18',slot,text:'B Story '+slot,skuIds:[]})),revision:1};demo.posts.push(other);
+let failSwap=true;window.confirm=()=>true;window.todo2SyncBridge={swapPosts:async pair=>{if(failSwap)throw Error('mock-offline');for(const value of pair)demo.posts[demo.posts.findIndex(post=>post.id===value.id)]=structuredClone(value);localStorage.setItem(MOCK_KEY,JSON.stringify(demo));}};
+showPost(reel.id);document.querySelector('#dayDetail [data-work-meta]').click();
+const swapForm=document.querySelector('#workForm');swapForm.elements.date.value=other.date;swapForm.dispatchEvent(new Event('submit',{bubbles:true,cancelable:true}));await new Promise(resolve=>setTimeout(resolve,0));
+if(demo.posts.find(post=>post.id===reel.id).date!=='2026-11-17'||demo.posts.find(post=>post.id===other.id).date!=='2026-11-18'||!swapForm.querySelector('#workError')?.textContent.includes('確認できません'))throw Error('failed swap changed posts');
+failSwap=false;swapForm.dispatchEvent(new Event('submit',{bubbles:true,cancelable:true}));await new Promise(resolve=>setTimeout(resolve,0));
+const swappedA=demo.posts.find(post=>post.id===reel.id),swappedB=demo.posts.find(post=>post.id===other.id);
+if(swappedA.date!=='2026-11-18'||swappedB.date!=='2026-11-17'||swappedA.caption!=='Reel本文'||swappedB.caption!=='B本文'||swappedA.shots[0].what!=='動画カット'||swappedB.shots[0].what!=='B撮影'||swappedA.stories.some(story=>story.date!=='2026-11-17')||swappedB.stories.some(story=>story.date!=='2026-11-18'))throw Error('swap lost post or story content');
+if(JSON.parse(localStorage.getItem(MOCK_KEY)).posts.find(post=>post.id===reel.id).date!=='2026-11-18')throw Error('reload lost swap');
 const before=JSON.stringify(demo.posts),genres=new Set();
 for(let i=0;i<20;i++){const day=dayAdd(TODAY,i+1),idea=makeStories({id:'qa-draft-'+i,date:day,format:'Feed',theme:'QA',primaryAxis:'CUSTOMER_VALUE',skuIds:[],shots:[],stories:[]})[0];
  if(!idea.researchRequired||idea.skuIds.length||!idea.theme||!idea.text.includes('要確認'))throw Error('Story1 research guard missing');genres.add(idea.genre);}

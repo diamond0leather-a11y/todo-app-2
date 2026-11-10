@@ -3,7 +3,7 @@ const fs=require('fs'),path=require('path'),assert=require('assert');
 const moduleSource=fs.readFileSync(path.join(__dirname,'dist/firebase-sync.js'),'utf8');
 const source="const FIREBASE_CONFIG={};const V7_PROJECT_ID='todo-app-2-v7';\n"+moduleSource.slice(moduleSource.indexOf('const WORKSPACE_ID='))
  .split('installUI();await setPersistence')[0];
-assert.match(fs.readFileSync(path.join(__dirname,'dist/index.html'),'utf8'),/firebase-sync\.js\?diagnostics=shots-flat-v2&amp;merge=structural-v1/);
+assert.match(fs.readFileSync(path.join(__dirname,'dist/index.html'),'utf8'),/firebase-sync\.js\?post-swap=20261110/);
 const listeners=new Map(),remote=new Map(),status={hidden:false,textContent:'',classList:{toggle(){}}};
 let local=null,failKey=null,failMeta=false,writes=0,reads=0;
 const localValues=new Map(),localStorage={getItem:key=>localValues.get(key)||null,setItem:(key,value)=>localValues.set(key,value),removeItem:key=>localValues.delete(key)};
@@ -15,7 +15,7 @@ const snapshot=value=>({exists:()=>value!==undefined,data:()=>structuredClone(va
 const sdk={initializeApp:()=>({}),getAuth:()=>({}),getFirestore:()=>({}),doc:ref,collection:ref,
  getDoc:async r=>{reads++;return snapshot(remote.get(r.path));},getDocs:async()=>({forEach(){}}),setDoc:async r=>{if(failMeta)throw Error('mock-offline');writes++;remote.set(r.path,{updatedAt:'mock'});},
  onSnapshot:(r,callback)=>{listeners.set(r.path,callback);return()=>listeners.delete(r.path);},
- runTransaction:async(_db,callback)=>{const staged=[];const result=await callback({get:async r=>snapshot(remote.get(r.path)),set:(r,value)=>staged.push([r.path,structuredClone(value)])});for(const [key,value] of staged){if(key===failKey)throw Error('mock-offline');remote.set(key,value);writes++;}return result;},
+ runTransaction:async(_db,callback)=>{const staged=[];const result=await callback({get:async r=>snapshot(remote.get(r.path)),set:(r,value)=>staged.push([r.path,structuredClone(value)])});if(staged.some(([key])=>key===failKey))throw Error('mock-offline');for(const [key,value] of staged){remote.set(key,value);writes++;}return result;},
  writeBatch:()=>({set(){},commit:async()=>{}}),serverTimestamp:()=>({seconds:1})};
 const names=Object.keys(sdk),create=new Function('window','document','localStorage',...names,`${source}\nreturn {splitState,joinState,listen,applyRemoteSoon,seed:(state)=>{currentUser={uid:'qa-user'};initialized=true;authGeneration=1;remoteDocs=new Map([...splitState(state)].map(([key,value])=>[key,{...value,version:1}]));localBaseline=new Map([...remoteDocs].map(([key,value])=>[key,clean(value)]));conflictBases.clear();writeFailed=false;}};`);
 const bridge=create(browser,document,localStorage,...names.map(name=>sdk[name]));
@@ -90,5 +90,21 @@ const wait=ms=>new Promise(resolve=>setTimeout(resolve,ms));
  const logs=[],originalError=console.error;console.error=(...args)=>logs.push(args);
  try{await assert.rejects(browser.todo2SyncBridge.flush(local,[postId]),/sync-conflict/);}finally{console.error=originalError;}
  const diagnostic=logs.find(([tag])=>tag==='[TODO2_SYNC_CONFLICT]')?.[1];assert(diagnostic);assert.deepEqual(diagnostic.fields,[]);assert.equal(diagnostic.baselineDocumentVersion,1);assert.equal(diagnostic.firestoreDocumentVersion,1);assert.equal(diagnostic.baselineShotsCount,3);assert.equal(diagnostic.localShotsCount,3);assert.equal(diagnostic.firestoreShotsCount,3);assert.equal(diagnostic.baselineVsFirestoreDeepEqual,false);assert.equal(diagnostic.diagnosticVersion,'shots-flat-v2');assert(!JSON.stringify(diagnostic).includes('既存カット'));assert(!JSON.stringify(diagnostic).includes('別端末の変更'));
- console.log('PASS mocked shared save, disjoint merge, true conflict, latest-state retry, posted/manual protection, partial retry, reload, no duplicates');
+ // A two-post swap must commit both records together or leave both untouched.
+ localValues.clear();seedFixture();failKey=null;
+ const swapHelper=require('./dist/v7-story-state.js'),pair=swapHelper.preparePostSwap(local,local.posts[4].id,local.posts[5].date);
+ const swapKeys=pair.map(post=>`workspaces/cian-en-paclam-v7/posts/${post.id}`),swapBefore=swapKeys.map(key=>structuredClone(remote.get(key)));
+ failKey=swapKeys[1];await assert.rejects(browser.todo2SyncBridge.swapPosts(pair),/mock-offline/);
+ assert.deepEqual(swapKeys.map(key=>remote.get(key)),swapBefore,'a failed transaction must leave both posts unchanged');
+ assert.equal(local.posts[4].date,swapBefore[0].value.date,'failed swap must not change local data');
+ failKey=null;await browser.todo2SyncBridge.swapPosts(pair);
+ assert.equal(remote.get(swapKeys[0]).value.date,swapBefore[1].value.date);
+ assert.equal(remote.get(swapKeys[1]).value.date,swapBefore[0].value.date);
+ assert.equal(local.posts[4].date,swapBefore[1].value.date);
+ assert.equal(local.posts[5].date,swapBefore[0].value.date);
+ assert.equal(remote.get(swapKeys[0]).value.stories[0].date,swapBefore[0].value.date);
+ localValues.clear();seedFixture();remote.get(swapKeys[1]).value.theme='同時編集';
+ await assert.rejects(browser.todo2SyncBridge.swapPosts(pair),/sync-conflict/);
+ assert.equal(remote.get(swapKeys[0]).value.date,swapBefore[0].value.date,'remote conflict must not change first post');
+ console.log('PASS mocked shared save and atomic two-post swap, conflict, reload, no duplicates');
 })().catch(error=>{console.error(error);process.exitCode=1;});

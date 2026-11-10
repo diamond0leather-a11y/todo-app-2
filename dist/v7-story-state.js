@@ -67,6 +67,24 @@
     if (new Set(stories.map(story => story.id)).size !== stories.length) throw Error('Story IDが重複しています');
     return {date, stories};
   }
+  function preparePostSwap(state, postId, date, idFactory = () => crypto.randomUUID()) {
+    const source=(state.posts||[]).find(post=>post.id===postId&&!post.deleted);
+    const target=(state.posts||[]).find(post=>post.id!==postId&&!post.deleted&&post.date===date);
+    if(!source||!target||source.date===target.date)throw Error('交換する2件の投稿を確認してください');
+    for(const post of [source,target]){
+      if(post.actualAt||post.actualSnapshot||post.noPostConfirmedAt||post.posted||post.status==='posted'||
+        Object.keys(state.records||{}).some(key=>key.startsWith(post.id+'|')))
+        throw Error('投稿済み・評価済みの企画は交換できません');
+    }
+    const withoutTarget={...state,posts:state.posts.filter(post=>post.id!==target.id)};
+    const withoutSource={...state,posts:state.posts.filter(post=>post.id!==source.id)};
+    const sourceStories=preparePostMove(withoutTarget,source.id,target.date,idFactory).stories;
+    const targetStories=preparePostMove(withoutSource,target.id,source.date,idFactory).stories;
+    return [
+      {...source,date:target.date,stories:sourceStories,standaloneStoryDate:source.standaloneStoryDate??source.date,manual:true,revision:(source.revision||0)+1},
+      {...target,date:source.date,stories:targetStories,standaloneStoryDate:target.standaloneStoryDate??target.date,manual:true,revision:(target.revision||0)+1}
+    ];
+  }
   function prepareStoryEdit(state, postId, index, changes, idFactory = () => crypto.randomUUID()) {
     const post = (state.posts || []).find(value => value.id === postId);
     const old = post?.stories?.[index];
@@ -78,7 +96,7 @@
     if ((state.posts || []).some(p => (p.stories || []).some((s, i) => s.id === id && (p.id !== postId || i !== index)))) throw Error('Story IDが重複しています');
     return {...old, ...changes, id, date, slot};
   }
-  const api = {validDate, dateOf, historyEntries, entriesOnDate, assertUnique, createStandalone, preparePostMove, prepareStoryEdit};
+  const api = {validDate, dateOf, historyEntries, entriesOnDate, assertUnique, createStandalone, preparePostMove, preparePostSwap, prepareStoryEdit};
   root.V7StoryState = api;
   if (typeof module !== 'undefined' && module.exports) module.exports = api;
 })(typeof globalThis !== 'undefined' ? globalThis : this);

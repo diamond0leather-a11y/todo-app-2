@@ -100,6 +100,22 @@ editPostMeta=function(id){
     openForm=previousOpen;
     previousOpen(title,body,form=>{
       const post=demo.posts.find(value=>value.id===id),oldDate=post?.date;
+      const target=demo.posts.find(value=>value.id!==id&&!value.deleted&&value.date===form.get('date'));
+      if(target){
+        if(form.get('plannedTime')!==post.plannedTime||form.get('format')!==post.format||form.get('theme')!==post.theme||
+          JSON.stringify(form.getAll('skuIds').slice().sort())!==JSON.stringify((post.skuIds||[]).slice().sort())||
+          form.has('paused')!==!!post.paused||String(form.get('combinationReason')||'')!==String(post.combinationReason||''))
+          throw Error('日付の交換は、ほかの編集とは分けて保存してください。');
+        const pair=V7StoryState.preparePostSwap(demo,id,target.date);
+        if(!confirm(`${oldDate} と ${target.date} のFeed・Reel企画を交換します。Story1〜4は元の日付に残します。よろしいですか？`))return false;
+        if(!window.todo2SyncBridge?.swapPosts)throw Error('共有保存に接続できません。交換は行っていません。');
+        const dialog=dx('#workDialog'),button=dx('#workForm .save-foot button'),error=dx('#workError');
+        button.disabled=true;button.textContent='2件を交換中…';error.textContent='共有への保存を確認しています。';
+        window.todo2SyncBridge.swapPosts(pair).then(()=>{dialog.close();refreshWork();toast('2件の投稿を交換しました');})
+         .catch(()=>{error.textContent='交換の保存を確認できませんでした。投稿を開き直して確認してください。';})
+         .finally(()=>{button.disabled=false;button.textContent='保存する';});
+        return false;
+      }
       const prepared=V7StoryState.preparePostMove(demo,id,form.get('date'));
       const result=onSave(form);
       if(result!==false){
