@@ -664,8 +664,9 @@ const v7DateDetailShowPost=showPost;
 showPost=function(id){
   v7DateDetailShowPost(id);
   const root=dx('#dayDetail');if(!root)return;
-  const copy=root.querySelector('.v7-post-copy'),meta=root.querySelector('[data-work-meta]');
-  if(copy&&!root.querySelector('[data-v7-post-date]')){const heading=copy.querySelector(':scope > h3');(heading||copy).insertAdjacentHTML(heading?'afterend':'afterbegin',`<button type="button" class="secondary full" data-v7-post-date="${html(id)}">日程変更</button>`);}
+  const label=dx('#dialogDayLabel'),meta=root.querySelector('[data-work-meta]');
+  label.querySelector('[data-v7-post-date]')?.remove();
+  label.insertAdjacentHTML('beforeend',` <button type="button" class="ghost small" data-v7-post-date="${html(id)}">日程変更</button>`);
   if(meta){meta.textContent='商品・形式などを編集';const section=meta.closest('.v7-post-block');if(section&&!meta.closest('details')){const details=document.createElement('details');details.innerHTML='<summary>その他の設定</summary>';meta.replaceWith(details);details.append(meta);section.append(details);}}
 };
 function v7SwapPreview(post){
