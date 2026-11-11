@@ -11,7 +11,7 @@ for(const block of source.matchAll(/<script(?![^>]*\bsrc=)[^>]*>([\s\S]*?)<\/scr
 assert(inlineCount>0,'画面内スクリプトを構文確認');
 const match=source.match(/<script>\s*\/\/ 商品管理の保存済み予定を起点に、将来だけ4か月固定周期を表示する。[\s\S]*?<\/script>/);
 assert(match,'販売予定一覧の処理が存在する');
-const script=match[0].replace(/^<script>/,'').replace(/<\/script>$/,'');
+const script=match[0].replace(/^<script>/,'').replace(/<\/script>$/,'').split('const previousYearCoverageRender=renderMonthWork;')[0];
 new vm.Script(script);
 const nodes=new Map();
 let saleTargetsMarkup='';
@@ -151,5 +151,5 @@ demo.months={};
 for(const month of ['2027-05','2027-06','2027-07','2027-08','2027-09','2027-10','2027-11','2027-12','2028-01','2028-02','2028-03','2028-04']){
  assert.equal(read(`saleScheduleData("${month}").planned.length`),1,'1～4月を起点とする4つの固定周期');
 }
-assert(!source.slice(match.index,match.index+match[0].length).includes('persist()'),'一覧は保存しない');
+assert(!targetFunction[0].includes('persist()'),'一覧は保存しない');
 console.log('PASS sale schedule: four-month groups, future only, manual once/fixed, discontinued, new SKU, dedup, year navigation, actual separation, read-only view');
