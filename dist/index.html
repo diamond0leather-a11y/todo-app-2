@@ -2360,6 +2360,17 @@ renderHome=function(){
   inputs.insertAdjacentHTML('beforeend',`<button type="button" class="eventline daily-input-row" data-story2-pending="${html(pending[0].post?.id||pending[0].story.id)}|${pending[0].index}"><strong>Story2の結果入力</strong><span>${pending.length}件</span></button>`);
  }
 };
+const compactHomeStoryRender=renderHome;
+renderHome=function(){
+ compactHomeStoryRender();
+ const entries=V7StoryState.entriesOnDate({...demo,posts:demo.posts.filter(post=>!post.deleted)},TODAY),slots=[1,2,3,4].map(slot=>entries.filter(entry=>entry.slot===slot));
+ const confirmed=slots.filter(found=>found.length===1&&found[0].story.aiPendingReview===false).length;
+ const pending=slots.filter(found=>found.length===1&&found[0].story.aiPendingReview===true).length;
+ const unknown=slots.filter(found=>found.length===1&&found[0].story.aiPendingReview!==true&&found[0].story.aiPendingReview!==false).length;
+ const missing=slots.filter(found=>found.length===0).length,duplicate=slots.filter(found=>found.length>1).length;
+ dx('#homeStoryCount').textContent='4枠';
+ dx('#homeStoryPreview').innerHTML=`<p class="tiny">Story 1〜4｜確認済み ${confirmed}/4${pending?'・未確認 '+pending:''}${unknown?'・状態不明 '+unknown:''}${missing?'・未登録 '+missing:''}${duplicate?'・重複 '+duplicate:''}</p>`;
+};
 const story2PostShow=showPost;
 showPost=function(id){story2PostShow(id);story2ResultButtons(dx('#dayDetail'));};
 const story2PlanRender=renderPlan;
