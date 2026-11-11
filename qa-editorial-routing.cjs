@@ -11,6 +11,7 @@ const context={
  dx(selector){return selector==='#workForm'?{querySelector(){return {textContent:''};}}:{};},
  demo:{posts:[post],storyDays:[]},V7StoryState:require('./dist/v7-story-state.js'),
  editorialActiveStoryEntries(state,date){return context.V7StoryState.entriesOnDate(state,date);},
+ importProtection(){return {whole:false};},
  openForm(title,body,save){context.title=title;context.body=body;context.save=save;},
  validate(data){calls.push('ten-day');if(!Array.isArray(data.plans))throw Error('10日企画のplansを確認してください。');return [];},
  validateSingle(data,date){calls.push('single-day');if(data.plan?.date!==date||data.plan?.format==='invalid')throw Error('単日再提案の形式を確認してください。');},
