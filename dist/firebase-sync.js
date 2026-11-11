@@ -255,6 +255,26 @@ window.todo2SyncBridge.flush=async(state,postIds=[])=>{
   }
  }}catch(error){writeFailed=true;status('共有データへの保存を確認できませんでした。再試行してください。',true);throw error;}
 };
+// A confirmed ten-day replacement must commit its settings and posts together.
+window.todo2SyncBridge.saveBulkPlan=async state=>{
+ if(!currentUser||!initialized||applyingRemote||saving||pendingWrites||writeTimer||writeFailed||pendingRaw())throw Error('共有保存中の編集があります。完了後に再試行してください。');
+ const generation=authGeneration,uid=currentUser.uid,next=splitState(state),changed=[];
+ for(const [key,payload] of next){const base=localBaseline.get(key);if(!same(base?.value,payload.value)){if(key!=='state/settings'&&key!=='state/shooting'&&!key.startsWith('posts/'))throw Error('対象外のデータ変更を検出しました。保存を中止しました。');changed.push({key,payload,base,ref:doc(workspace,...key.split('/'))});}}
+ if(!changed.length)return;
+ const saved=await runTransaction(db,async tx=>{
+  const snapshots=await Promise.all(changed.map(row=>tx.get(row.ref)));
+  if(generation!==authGeneration)throw Error('session-ended');
+  const results=[];
+  for(let i=0;i<changed.length;i++){const row=changed[i],current=snapshots[i].exists()?snapshots[i].data():null;
+   if(row.base?(!current||current.deleted||!same(row.base.value,current.value)):!!current)throw Error('sync-conflict');
+   if(row.key.startsWith('posts/')&&current?.value&&(current.value.actualAt||current.value.actualSnapshot||current.value.noPostConfirmedAt||current.value.posted||['posted','done'].includes(current.value.status)))throw Error('sync-conflict');
+   const nextDoc={...row.payload,version:(current.version||0)+1,updatedAt:serverTimestamp(),updatedBy:uid};tx.set(row.ref,nextDoc);results.push([row.key,{...nextDoc,updatedAt:undefined,updatedBy:undefined}]);
+  }return results;
+ });
+ if(generation!==authGeneration)throw Error('session-ended');
+ for(const [key,value] of saved){remoteDocs.set(key,value);localBaseline.set(key,clean(value));}
+ window.todo2SyncBridge.replace(state);writeFailed=false;status('共有データを保存しました');
+};
 // Exchange two planned posts in one Firestore transaction. Do not stage a partial local edit.
 window.todo2SyncBridge.swapPosts=async(nextPosts)=>{
  if(!currentUser||!initialized||applyingRemote||saving||pendingWrites||writeTimer||writeFailed||pendingRaw())throw Error('共有保存中の編集があります。完了後に交換してください。');

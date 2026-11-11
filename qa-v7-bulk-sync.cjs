@@ -1,0 +1,14 @@
+const assert=require('node:assert/strict'),fs=require('node:fs'),vm=require('node:vm');
+const source=fs.readFileSync('dist/firebase-sync.js','utf8');
+const part=source.slice(source.indexOf('window.todo2SyncBridge.saveBulkPlan=async state=>{'),source.indexOf('// Exchange two planned posts'));
+assert.ok(part.includes('runTransaction'));
+const clone=value=>JSON.parse(JSON.stringify(value));
+const baseline=new Map([['state/settings',{value:{storyDays:[{id:'s',text:'old'}]},version:1}],['posts/p',{value:{id:'p',caption:'old'},version:1}]]);
+const remote=new Map([...baseline].map(([key,value])=>[key,clone(value)]));let applied=null,writes=0;
+const ctx={window:{todo2SyncBridge:{replace:state=>{applied=clone(state);}}},currentUser:{uid:'qa'},initialized:true,applyingRemote:false,saving:false,pendingWrites:0,writeTimer:null,writeFailed:false,pendingRaw:()=>false,authGeneration:1,db:{},workspace:{},localBaseline:new Map([...baseline].map(([key,value])=>[key,clone(value)])),remoteDocs:new Map(),clean:clone,same:(a,b)=>JSON.stringify(a)===JSON.stringify(b),serverTimestamp:()=>0,status(){},doc:(_workspace,group,id)=>group+'/'+id,splitState:state=>new Map([['state/settings',{value:{storyDays:state.storyDays}}],['posts/p',{entityId:'p',value:state.posts[0]}]])};
+ctx.runTransaction=async(_db,fn)=>{const staged=[];const tx={get:async key=>({exists:()=>remote.has(key),data:()=>clone(remote.get(key))}),set:(key,value)=>staged.push([key,value])};const result=await fn(tx);for(const [key,value] of staged)remote.set(key,clone(value));writes+=staged.length;return result;};
+vm.createContext(ctx);vm.runInContext(part,ctx);
+(async()=>{await ctx.window.todo2SyncBridge.saveBulkPlan({storyDays:[{id:'s',text:'new'}],posts:[{id:'p',caption:'new'}]});assert.equal(writes,2);assert.equal(remote.get('state/settings').value.storyDays[0].text,'new');assert.equal(remote.get('posts/p').value.caption,'new');assert.equal(applied.posts[0].caption,'new');
+ const before=clone([...remote]);remote.get('posts/p').value.caption='other';applied=null;await assert.rejects(ctx.window.todo2SyncBridge.saveBulkPlan({storyDays:[{id:'s',text:'later'}],posts:[{id:'p',caption:'later'}]}),/sync-conflict/);assert.equal(writes,2);assert.equal(applied,null);assert.equal(remote.get('state/settings').value.storyDays[0].text,'new');assert.notDeepEqual([...remote],before);
+ console.log('PASS atomic bulk sync: settings and post together, remote conflict writes neither, no local success');
+})().catch(error=>{console.error(error);process.exitCode=1;});

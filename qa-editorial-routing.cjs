@@ -7,7 +7,7 @@ const section=(from,to)=>source.slice(source.indexOf(from),source.indexOf(to));
 const post={id:'post-1',date:'2026-10-11',revision:2};
 const calls=[];
 const context={
- SCHEMA:'cian-editorial-v1',SINGLE_SCOPE:'single-day-reproposal',previewSaving:false,
+ SCHEMA:'cian-editorial-v1',SINGLE_SCOPE:'single-day-reproposal',previewSaving:false,structuredClone,
  dx(selector){return selector==='#workForm'?{querySelector(){return {textContent:''};}}:{};},
  demo:{posts:[post],storyDays:[]},V7StoryState:require('./dist/v7-story-state.js'),
  editorialActiveStoryEntries(state,date){return context.V7StoryState.entriesOnDate(state,date);},
