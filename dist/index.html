@@ -1912,7 +1912,7 @@ document.head.insertAdjacentHTML('beforeend','<style>#dayDetail .v7-post-block{m
 </script>
 <script src="./story-replacement-safety.js"></script>
 <script src="./story1-alternatives.js"></script>
-<script src="./v7-story-ui.js?story-review-batch=20261111"></script>
+<script src="./v7-story-ui.js?execution-story-actions=20261111"></script>
 <script src="./v7-story1-import.js?story1-review=20261110"></script>
 <script>
 // v7.1: read-only daily execution view. Existing post, Story and shot editors remain the only edit paths.
@@ -1946,7 +1946,7 @@ function renderExecution(){
       ${Array.isArray(story.options)&&story.options.length?executionLine('選択肢',story.options.join('／')):''}${executionLine('答え',story.correctAnswer||'')}
       ${slot===3&&story.skuIds?.length?executionLine('対象SKU',story.skuIds.map(skuLabel).join(' ＋ ')):''}
       ${executionLine(slot===4?'次の行動・CTA':'見た方への案内',story.action||'未設定','execution-copy')}
-      <button type="button" class="ghost" data-v7-story-edit="${html(entry.post?.id||story.id)}|${entry.index}">Storyを編集</button>`:'';
+      <p class="tiny muted">${html(v7StoryReviewLabel(story))}</p><div class="execution-actions"><button type="button" class="ghost" data-v7-story-edit="${html(entry.post?.id||story.id)}|${entry.index}">編集</button>${!v7StoryActionLocked(entry)?`${story.aiPendingReview===false?'':`<button type="button" class="secondary" data-v7-story-confirm="${html(entry.post?.id||story.id)}|${entry.index}">このStoryを確認</button>`}<button type="button" class="ghost" data-v7-story-replace="${html(entry.post?.id||story.id)}|${entry.index}">別案に変更</button>`:'<span class="badge">投稿／反応の記録あり</span>'}</div>`:'';
     return `<article class="card execution-story"><h3>Story ${slot}｜${html(STORY_ROLES[slot-1])}</h3>${body||'<p class="muted">この枠は未登録です。</p>'}</article>`;
   }).join('');
   dx('#executionContent').innerHTML=postSection+shootSection+storySection;

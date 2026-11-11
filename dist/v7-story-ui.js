@@ -10,6 +10,10 @@ function v7StoryEntry(id,index){
   const standalone=demo.storyDays.find(value=>value.id===id);
   return {post:null,story:standalone,index:demo.storyDays.indexOf(standalone)};
 }
+function v7StoryActionLocked(entry){
+ const story=entry?.story,post=entry?.post;if(!story)return true;
+ return !!(story.actualAt||story.postedAt||story.publishedAt||story.performedAt||story.completedAt||story.posted||story.performed||['posted','done'].includes(story.status)||post&&(post.actualAt||post.actualSnapshot||post.posted||['posted','done'].includes(post.status))||v7StoryHasReaction(demo,story,post?.id||story.id,story.slot||entry.index+1));
+}
 function v7StoryFields(story={}){
   return formInput('テーマ','theme',story.theme||'')+`<label class="wlabel">Storyに載せる文章<textarea name="text" rows="5" required>${html(story.text||'')}</textarea></label>`+
     formInput('使う写真・動画','asset',story.asset||'')+formInput('見た方への案内','action',story.action||'')+
@@ -63,8 +67,10 @@ editFinalStory=function(id,index,mode){
 function v7ReplaceStory(id,index){
   const entry=v7StoryEntry(id,index),old=entry.story;
   if(!old){toast('Storyが見つかりません');return;}
+  if(v7StoryActionLocked(entry)){toast('投稿・反応の記録があるStoryは別案に変更できません');return;}
   if(dx('#workDialog').open)dx('#workDialog').close();
   openForm(`Story ${old.slot??index+1}を別案に変更`,v7StoryFields(old),form=>{
+    if(v7StoryActionLocked(v7StoryEntry(id,index)))throw Error('Storyの投稿・反応状態が変わりました。別案への変更を中止しました');
     const slot=old.slot??index+1,candidate=v7StoryContent(form,slot);
     const holder=entry.post||{id:old.id,date:old.date,stories:[old],storyReplacementHistory:old.replacementHistory||[]};
     const result=prepareStoryReplacement(holder,slot,{...candidate,manual:true},demo.reactions,{idFactory:newId});
@@ -72,7 +78,7 @@ function v7ReplaceStory(id,index){
     if(entry.post){
       const currentIndex=entry.post.stories.findIndex(story=>story.id===old.id);
       if(currentIndex<0)throw Error('Storyが変更されています。開き直してください');
-      entry.post.stories[currentIndex]=result.story;
+      entry.post.stories[currentIndex]={...result.story,aiPendingReview:false};
       entry.post.storyReplacementHistory=result.history;
       entry.post.manual=true;entry.post.revision=(entry.post.revision||0)+1;
       storyDrafts.delete(entry.post.id);
@@ -599,7 +605,7 @@ document.addEventListener('click',event=>{
   if(confirm){
     event.preventDefault();event.stopImmediatePropagation();
     const [id,indexText]=confirm.dataset.v7StoryConfirm.split('|'),index=Number(indexText),entry=v7StoryEntry(id,index),post=entry.post;
-    try{if(post){post.stories[index]=V7StoryState.prepareStoryEdit(demo,id,index,{manual:true,aiPendingReview:false});post.manual=true;post.revision++;}else if(entry.story){entry.story.manual=true;entry.story.aiPendingReview=false;}else throw Error('Storyが見つかりません');persist();refreshWork();toast('Storyを確認済みにしました');}catch(error){toast(error.message);}
+    try{if(v7StoryActionLocked(entry))throw Error('投稿・反応の記録があるStoryは確認状態を変更できません');if(post){post.stories[index]=V7StoryState.prepareStoryEdit(demo,id,index,{manual:true,aiPendingReview:false});post.manual=true;post.revision++;}else if(entry.story){entry.story.manual=true;entry.story.aiPendingReview=false;}else throw Error('Storyが見つかりません');persist();refreshWork();toast('Storyを確認済みにしました');}catch(error){toast(error.message);}
     return;
   }
   const button=event.target.closest('[data-v7-story-edit]');
