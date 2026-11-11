@@ -2,6 +2,7 @@
 const v7PreviousAllTasks=allTasks;
 allTasks=function(){return v7PreviousAllTasks().filter(task=>task.stage==='7d');};
 demo.storyDays ||= [];
+function v7StoryReviewLabel(story){return story.aiPendingReview===true?'AI案・未確認':story.aiPendingReview===false?'確認済み':story.editorialSource==='manual'?'手動編集済み':'確認状態不明';}
 
 function v7StoryEntry(id,index){
   const post=demo.posts.find(value=>value.id===id);
@@ -43,7 +44,7 @@ function v7EditStandalone(id){
     const index=demo.storyDays.findIndex(story=>story.id===id);
     if(index<0)throw Error('Storyが変更されています。開き直してください');
     V7StoryState.assertUnique(demo,current.date,current.slot,null,index);
-    demo.storyDays[index]={...current,...next,...(next.asset!==current.asset||JSON.stringify(next.skuIds)!==JSON.stringify(current.skuIds||[])?{shotId:undefined}:{}),manual:true,editorialSource:'manual'};
+    demo.storyDays[index]={...current,...next,...(next.asset!==current.asset||JSON.stringify(next.skuIds)!==JSON.stringify(current.skuIds||[])?{shotId:undefined}:{}),manual:true,aiPendingReview:false,editorialSource:'manual'};
   });
 }
 const v7PreviousEditFinalStory=editFinalStory;
@@ -78,7 +79,7 @@ function v7ReplaceStory(id,index){
     }else{
       const currentIndex=demo.storyDays.findIndex(story=>story.id===old.id);
       if(currentIndex<0)throw Error('Storyが変更されています。開き直してください');
-      demo.storyDays[currentIndex]={...result.story,replacementHistory:result.history};
+      demo.storyDays[currentIndex]={...result.story,aiPendingReview:false,replacementHistory:result.history};
     }
   });
 }
@@ -139,7 +140,7 @@ renderHome=function(){
   const entries=V7StoryState.entriesOnDate(demo,TODAY).sort((a,b)=>a.slot-b.slot);
   const preview=dx('#homeStoryPreview');
   dx('#homeStoryCount').textContent=entries.length+'案';
-  preview.innerHTML=(entries.length?entries.map(({post,story,index,slot})=>`<article class="home-story-mini"><strong>Story ${slot}｜${html(story.purpose||STORY_ROLES[slot-1]||'')}</strong><p>${html(story.text||'内容を確認してください')}</p><div class="actions"><button class="ghost small" data-v7-story-edit="${html(post?.id||story.id)}|${index}">編集</button><button class="ghost small" data-v7-story-replace="${html(post?.id||story.id)}|${index}">別案に変更</button><button class="ghost small" data-v7-story-response="${html(post?.id||story.id)}|${index}">反応を記録</button>${story.manual?'<span class="badge">確認済み</span>':`<button class="ghost small" data-v7-story-confirm="${html(post?.id||story.id)}|${index}">このStoryを確認</button>`}</div></article>`).join(''):'<p class="muted">今日のStory予定はありません。</p>')+[1,2,3,4].filter(slot=>!entries.some(entry=>entry.slot===slot)).map(slot=>`<button class="ghost small" data-v7-story-create="${TODAY}|${slot}">＋Story ${slot}</button>`).join('');
+  preview.innerHTML=(entries.length?entries.map(({post,story,index,slot})=>`<article class="home-story-mini"><strong>Story ${slot}｜${html(story.purpose||STORY_ROLES[slot-1]||'')}</strong><p>${html(story.text||'内容を確認してください')}</p><div class="actions"><button class="ghost small" data-v7-story-edit="${html(post?.id||story.id)}|${index}">編集</button><button class="ghost small" data-v7-story-replace="${html(post?.id||story.id)}|${index}">別案に変更</button><button class="ghost small" data-v7-story-response="${html(post?.id||story.id)}|${index}">反応を記録</button>${story.aiPendingReview===false?'<span class="badge">確認済み</span>':`<span class="badge">${html(v7StoryReviewLabel(story))}</span><button class="ghost small" data-v7-story-confirm="${html(post?.id||story.id)}|${index}">このStoryを確認</button>`}</div></article>`).join(''):'<p class="muted">今日のStory予定はありません。</p>')+[1,2,3,4].filter(slot=>!entries.some(entry=>entry.slot===slot)).map(slot=>`<button class="ghost small" data-v7-story-create="${TODAY}|${slot}">＋Story ${slot}</button>`).join('');
 };
 
 const v7PreviousRenderMonth=renderMonthWork;
@@ -190,7 +191,7 @@ renderPlan=function(){
       if(!post&&card.dataset.v7StoryPlanDate)card.innerHTML=`<div class="row between"><span class="badge">${html(planDay(date))}</span><span class="badge">投稿なし</span></div>`;
       const count=card.querySelector('.row .tiny');if(count&&/\d+ Story/.test(count.textContent))count.textContent=count.textContent.replace(/\d+ Story/,`${entries.length} Story`);
       const panel=document.createElement('details');panel.dataset.v7StoryDayStatus=date;panel.className='v7-story-day-status';panel.open=date===TODAY;
-      panel.innerHTML=`<summary>Story1〜4｜採用済み ${entries.length}/4</summary>${[1,2,3,4].map(slot=>{const found=entries.find(entry=>entry.slot===slot),story=found?.story,status=story?(story.editorialSource==='chatgpt-ten-day'?'採用済み':story.manual?'手動編集済み':'採用済み'):'未採用';return `<div class="v7-story-day-slot"><strong>Story ${slot}｜${html(status)}</strong>${story?`<p>${html(story.text||'')}</p><button class="ghost small" data-v7-story-edit="${html(found.post?.id||story.id)}|${found.index}">編集</button>`:`<button class="ghost small" data-v7-story-create="${date}|${slot}">＋Story ${slot}を追加</button>`}</div>`;}).join('')}<p class="tiny muted">AI案のコピー・JSON取り込みはPCで行います。取り込み後はiPhoneでもStoryを確認・編集し、枠ごとに採用できます。</p>`;
+      panel.innerHTML=`<summary>Story1〜4｜採用済み ${entries.length}/4</summary>${[1,2,3,4].map(slot=>{const found=entries.find(entry=>entry.slot===slot),story=found?.story,status=story?v7StoryReviewLabel(story):'未採用';return `<div class="v7-story-day-slot"><strong>Story ${slot}｜${html(status)}</strong>${story?`<p>${html(story.text||'')}</p><button class="ghost small" data-v7-story-edit="${html(found.post?.id||story.id)}|${found.index}">編集</button>`:`<button class="ghost small" data-v7-story-create="${date}|${slot}">＋Story ${slot}を追加</button>`}</div>`;}).join('')}<p class="tiny muted">AI案のコピー・JSON取り込みはPCで行います。取り込み後はiPhoneでもStoryを確認・編集し、枠ごとに採用できます。</p>`;
       card.append(panel);
     }
   };
@@ -239,7 +240,7 @@ showPost=function(id){
     const card=document.createElement('article');
     card.className='story-card';
     card.dataset.v7StorySlot=String(slot);
-    card.innerHTML=`<strong>Story ${slot}｜${html(story.purpose||STORY_ROLES[slot-1]||'')}</strong><p class="tiny muted">${html(story.date)} の独立Story</p><h4>${html(story.theme||'')}</h4><p class="story-text">${html(story.text||'')}</p><p class="tiny">${html(story.asset||'')}</p><p>見た方に：${html(story.action||'')}</p>${slot===1&&story.researchSources?.length?`<details><summary>出典・確認状態</summary>${story.researchSources.map(source=>`<p class="tiny" style="overflow-wrap:anywhere">${html(source.name||source.title||'出典')}：${html(source.url||'URL未設定')}</p>`).join('')}<p class="tiny">${html(story.verificationStatus||'未設定')}</p></details>`:''}<div class="actions"><button class="ghost small" data-v7-story-edit="${html(story.id)}|${index}">編集</button><button class="ghost small" data-v7-story-response="${html(story.id)}|${index}">反応を記録</button></div>`;
+    card.innerHTML=`<strong>Story ${slot}｜${html(story.purpose||STORY_ROLES[slot-1]||'')}</strong><p class="tiny muted">${html(story.date)} の独立Story・${html(v7StoryReviewLabel(story))}</p><h4>${html(story.theme||'')}</h4><p class="story-text">${html(story.text||'')}</p><p class="tiny">${html(story.asset||'')}</p><p>見た方に：${html(story.action||'')}</p>${slot===1&&story.researchSources?.length?`<details><summary>出典・確認状態</summary>${story.researchSources.map(source=>`<p class="tiny" style="overflow-wrap:anywhere">${html(source.name||source.title||'出典')}：${html(source.url||'URL未設定')}</p>`).join('')}<p class="tiny">${html(story.verificationStatus||'未設定')}</p></details>`:''}<div class="actions"><button class="ghost small" data-v7-story-edit="${html(story.id)}|${index}">編集</button><button class="ghost small" data-v7-story-response="${html(story.id)}|${index}">反応を記録</button>${story.aiPendingReview===false?'':`<button class="ghost small" data-v7-story-confirm="${html(story.id)}|${index}">このStoryを確認</button>`}</div>`;
     const next=[...section.querySelectorAll(':scope > .story-card')].find(existing=>{
       const position=existing.dataset.v7StorySlot?Number(existing.dataset.v7StorySlot):cards.indexOf(existing)+1;
       return position>slot;
@@ -327,7 +328,7 @@ recordStoryResponse=function(id,index,mode){
       if(reaction){
         story.id=storyId;
         story.date=post?V7StoryState.dateOf(story,post):story.date;
-        story.manual=true;
+        story.manual=true;story.aiPendingReview=false;
         if(post){post.manual=true;post.revision=(post.revision||0)+1;}
         reaction.sourceStory={postId:id,slot:story.slot||index+1,storyId,snapshot:structuredClone(story)};
         reaction.parentId=form.elements.parentId?.value||story.parentId||null;
@@ -349,8 +350,8 @@ function v7StoryHasReaction(state,story,postId,slot){
 }
 function v7AdoptAiStory(old,proposal,slot,date){
   const changes=structuredClone(proposal);
-  for(const key of ['id','date','slot','reactionId','shotId','sourceStory','replacementHistory'])delete changes[key];
-  const result={...structuredClone(old||{}),...changes,id:old?.id||newId(),date:old?.date||date,slot,manual:true};
+  for(const key of ['id','date','slot','reactionId','shotId','sourceStory','replacementHistory','aiPendingReview'])delete changes[key];
+  const result={...structuredClone(old||{}),...changes,id:old?.id||newId(),date:old?.date||date,slot,manual:true,aiPendingReview:false};
   if(old?.asset!==result.asset)delete result.shotId;
   return result;
 }
@@ -598,7 +599,7 @@ document.addEventListener('click',event=>{
   if(confirm){
     event.preventDefault();event.stopImmediatePropagation();
     const [id,indexText]=confirm.dataset.v7StoryConfirm.split('|'),index=Number(indexText),entry=v7StoryEntry(id,index),post=entry.post;
-    try{if(post){post.stories[index]=V7StoryState.prepareStoryEdit(demo,id,index,{manual:true});post.manual=true;post.revision++;}else if(entry.story){entry.story.manual=true;}else throw Error('Storyが見つかりません');persist();refreshWork();toast('Storyを確認済みにしました');}catch(error){toast(error.message);}
+    try{if(post){post.stories[index]=V7StoryState.prepareStoryEdit(demo,id,index,{manual:true,aiPendingReview:false});post.manual=true;post.revision++;}else if(entry.story){entry.story.manual=true;entry.story.aiPendingReview=false;}else throw Error('Storyが見つかりません');persist();refreshWork();toast('Storyを確認済みにしました');}catch(error){toast(error.message);}
     return;
   }
   const button=event.target.closest('[data-v7-story-edit]');

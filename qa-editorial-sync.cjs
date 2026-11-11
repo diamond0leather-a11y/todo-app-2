@@ -3,7 +3,7 @@ const fs=require('fs'),path=require('path'),assert=require('assert');
 const moduleSource=fs.readFileSync(path.join(__dirname,'dist/firebase-sync.js'),'utf8');
 const source="const FIREBASE_CONFIG={};const V7_PROJECT_ID='todo-app-2-v7';\n"+moduleSource.slice(moduleSource.indexOf('const WORKSPACE_ID='))
  .split('installUI();await setPersistence')[0];
-assert.match(fs.readFileSync(path.join(__dirname,'dist/index.html'),'utf8'),/firebase-sync\.js\?story1-review=20261110/);
+assert.match(fs.readFileSync(path.join(__dirname,'dist/index.html'),'utf8'),/firebase-sync\.js\?story-review-batch=20261111/);
 const listeners=new Map(),remote=new Map(),status={hidden:false,textContent:'',classList:{toggle(){}}};
 let local=null,failKey=null,failMeta=false,writes=0,reads=0;
 const localValues=new Map(),localStorage={getItem:key=>localValues.get(key)||null,setItem:(key,value)=>localValues.set(key,value),removeItem:key=>localValues.delete(key)};

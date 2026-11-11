@@ -317,7 +317,7 @@ window.todo2SyncBridge.saveStory1Selection=async(changes)=>{
    for(const {date,story} of changes){
     const index=next.storyDays.findIndex(value=>value.date===date&&value.slot===1),old=index>=0?next.storyDays[index]:null;
     if(old&&(old.reactionId||old.actualAt||old.postedAt||old.publishedAt||old.performedAt||old.completedAt||old.posted||old.performed||old.status==='posted'||old.status==='done'))throw Error('sync-conflict');
-    const adopted={...old,category:story.category,title:story.title,theme:story.title,text:story.text,action:story.action,asset:story.asset,materialMode:story.materialMode,skuIds:clean(story.skuIds),researchSources:clean(story.researchSources),verificationStatus:story.verificationStatus,id:old?.id||crypto.randomUUID(),date,slot:1,manual:true,editorialSource:'story1-verified-review'};
+    const adopted={...old,category:story.category,title:story.title,theme:story.title,text:story.text,action:story.action,asset:story.asset,materialMode:story.materialMode,skuIds:clean(story.skuIds),researchSources:clean(story.researchSources),verificationStatus:story.verificationStatus,id:old?.id||crypto.randomUUID(),date,slot:1,manual:true,aiPendingReview:false,editorialSource:'story1-verified-review'};
     if(index>=0)next.storyDays[index]=adopted;else next.storyDays.push(adopted);
    }
    storyDayEntries(next.storyDays);

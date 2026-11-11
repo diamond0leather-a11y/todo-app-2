@@ -48,6 +48,7 @@ assert.deepEqual(Array.from(taskContext.allTasks(),task=>task.stage),['7d'],'v7 
 const preview={innerHTML:''},count={textContent:''},hero={innerHTML:'',insertAdjacentHTML(_where,value){this.innerHTML+=value;}};
 const ui={demo:state,TODAY:'2026-11-05',V7StoryState:story,STORY_ROLES:['知る','対話','発見','導線'],html:String,editPostMeta(){ui.openForm('投稿','',form=>{post.date=form.get('date');});},openForm(_title,_body,onSave){ui.save=onSave;},renderHome(){},dx:selector=>selector==='#homeStoryPreview'?preview:selector==='#homeTodayContent'?hero:count};
 vm.createContext(ui);
+vm.runInContext(uiSource.slice(uiSource.indexOf('function v7StoryReviewLabel('),uiSource.indexOf('function v7StoryEntry(')),ui);
 vm.runInContext(uiSource.slice(uiSource.indexOf('const v7PreviousEditPostMeta='),uiSource.indexOf('const v7PreviousRenderMonth=')),ui);
 ui.editPostMeta('feed-1');
 ui.save({get:()=> '2026-11-10'});

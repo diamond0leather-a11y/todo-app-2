@@ -1873,7 +1873,7 @@ function correctNoPost(id){const post=demo.posts.find(p=>p.id===id&&p.noPostConf
 document.addEventListener('click',e=>{const correction=e.target.closest('[data-work-no-post-correct]');if(correction){e.preventDefault();e.stopImmediatePropagation();correctNoPost(correction.dataset.workNoPostCorrect);return;}const button=e.target.closest('[data-work-review-date]');if(!button)return;e.preventDefault();e.stopImmediatePropagation();reviewDate=button.dataset.workReviewDate;homeReviewFilter=null;renderReviewWork();const noPost=demo.posts.filter(p=>p.noPostConfirmedAt&&!p.deleted&&noPostCalendarDate(p)===reviewDate);if(noPost.length===1){correctNoPost(noPost[0].id);return;}const saved=reviewCalendarTasks(reviewDate).filter(t=>t.stage==='7d'&&reviewRecordForTask(t));if(saved.length===1)editRecord(saved[0].key);else dx('#todayRecordsWork').scrollIntoView({block:'start'});},true);
 </script>
 <script src="./period-planner.js"></script>
-<script src="./chatgpt-editorial.js?ten-day-import-ux=20261111"></script>
+<script src="./chatgpt-editorial.js?story-review-batch=20261111"></script>
 <script>
 let firebaseSyncApplying=false;const firebaseLocalPersist=persist;persist=function(){if(!firebaseSyncApplying&&window.todo2SyncBridge?.stage)window.todo2SyncBridge.stage(window.todo2SyncBridge.read());firebaseLocalPersist();if(!firebaseSyncApplying&&window.todo2SyncBridge)window.dispatchEvent(new CustomEvent('todo2:local-save',{detail:{state:window.todo2SyncBridge.read()}}));};
 window.todo2SyncBridge={read:()=>structuredClone(demo),emptyState:()=>structuredClone(emptyV7State()),replace:state=>{firebaseSyncApplying=true;try{demo=structuredClone(state);try{localStorage.setItem(MOCK_KEY,JSON.stringify(demo));}catch{}storyDrafts?.clear?.();refreshWork();}finally{firebaseSyncApplying=false;}}};
@@ -1912,7 +1912,7 @@ document.head.insertAdjacentHTML('beforeend','<style>#dayDetail .v7-post-block{m
 </script>
 <script src="./story-replacement-safety.js"></script>
 <script src="./story1-alternatives.js"></script>
-<script src="./v7-story-ui.js?story1-review=20261110"></script>
+<script src="./v7-story-ui.js?story-review-batch=20261111"></script>
 <script src="./v7-story1-import.js?story1-review=20261110"></script>
 <script>
 // v7.1: read-only daily execution view. Existing post, Story and shot editors remain the only edit paths.
@@ -2383,6 +2383,6 @@ document.addEventListener('click',event=>{
 },true);
 </script>
 <script src="./firebase-config-v7.js"></script>
-<script type="module" src="./firebase-sync.js?story1-review=20261110"></script>
+<script type="module" src="./firebase-sync.js?story-review-batch=20261111"></script>
 </body>
 </html>

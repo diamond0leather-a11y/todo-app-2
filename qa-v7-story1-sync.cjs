@@ -8,7 +8,7 @@ const to=file.indexOf('\ndocument.addEventListener(\'close\'',from);
 assert(from>0&&to>from);
 const source=file.slice(from,to);
 const clone=value=>JSON.parse(JSON.stringify(value));
-const originalStory={id:'story-1',date:'2026-11-09',slot:1,text:'元のStory',asset:'元素材',manual:true};
+const originalStory={id:'story-1',date:'2026-11-09',slot:1,text:'元のStory',asset:'元素材',manual:true,aiPendingReview:true,editorialSource:'chatgpt-ten-day'};
 const state={schema:1,posts:[{id:'post-1',date:'2026-11-09',format:'Feed',caption:'元の本文',shots:[{id:'cut-1'}],revision:1}],storyDays:[originalStory,{id:'story-2',date:'2026-11-09',slot:2,text:'守るStory2'}],reactions:[],skus:[],records:{}};
 const settings={value:{schema:1,storyDays:clone(state.storyDays)},version:1};
 const remote=new Map([['state/settings',clone(settings)],['posts/post-1',{entityId:'post-1',value:clone(state.posts[0]),version:1}]]);
@@ -31,7 +31,7 @@ async function run(){
  remote.get('posts/post-1').value.actualAt='2026-11-09T10:00:00+09:00';failed=false;await assert.rejects(context.window.todo2SyncBridge.saveStory1Selection([{date:proposal.date,story:proposal}]),/sync-conflict/);delete remote.get('posts/post-1').value.actualAt;
  remote.set('voices/qa-reaction',{entityId:'qa-reaction',value:{sourceStory:{storyId:'story-1'}}});await assert.rejects(context.window.todo2SyncBridge.saveStory1Selection([{date:proposal.date,story:proposal}]),/反応/);remote.delete('voices/qa-reaction');
  failed=false;await context.window.todo2SyncBridge.saveStory1Selection([{date:proposal.date,story:proposal}]);
- assert.equal(writeCount,1);assert.equal(app.storyDays[0].text,proposal.text);assert.equal(app.storyDays[1].text,'守るStory2');assert.equal(app.posts[0].caption,'元の本文');assert.equal(app.posts[0].shots[0].id,'cut-1');assert.equal(app.storyDays[0].researchSources[0].url,'https://example.test');
+ assert.equal(writeCount,1);assert.equal(app.storyDays[0].text,proposal.text);assert.equal(app.storyDays[0].aiPendingReview,false);assert.equal(app.storyDays[1].text,'守るStory2');assert.equal(app.posts[0].caption,'元の本文');assert.equal(app.posts[0].shots[0].id,'cut-1');assert.equal(app.storyDays[0].researchSources[0].url,'https://example.test');
  const after=clone(app);remote.get('state/settings').value.storyDays[0].text='別端末の変更';await assert.rejects(context.window.todo2SyncBridge.saveStory1Selection([{date:proposal.date,story:{...proposal,text:'また変更'}}]),/sync-conflict/);assert.equal(JSON.stringify(app),JSON.stringify(after));
  console.log('PASS Story1 settings transaction: atomic failure, selected-only update, other data preserved');
 }
