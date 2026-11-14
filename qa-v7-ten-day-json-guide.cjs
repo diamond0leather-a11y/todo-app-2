@@ -1,0 +1,47 @@
+const assert=require('node:assert/strict');
+const fs=require('node:fs');
+const vm=require('node:vm');
+const source=fs.readFileSync('dist/chatgpt-editorial.js','utf8');
+const html=fs.readFileSync('dist/index.html','utf8');
+const between=(start,end)=>{const a=source.indexOf(start),b=source.indexOf(end,a);assert(a>=0&&b>a,start);return source.slice(a,b);};
+const modes=['過去素材使用可','新規撮影必要','まとめ撮り対象'];
+assert(source.includes(`editorialMaterialModes=[${modes.map(mode=>`'${mode}'`).join(',')}]`));
+assert(source.includes(`!['${modes.join("','")}'].includes(story.materialMode)`),'生成指示と既存検査の許容値を照合');
+const dayAdd=(date,days)=>new Date(Date.parse(date+'T12:00:00Z')+days*86400000).toISOString().slice(0,10);
+const current={days:Array.from({length:10},(_,i)=>({date:dayAdd('2026-11-09',i),dayNumber:i+1}))};
+const next={days:Array.from({length:10},(_,i)=>({date:dayAdd('2026-11-19',i),dayNumber:i+11}))};
+const ctx={SCHEMA:'cian-editorial-v1',validAxes:['CUSTOMER_VALUE','INSTAGRAM_GROWTH','BUSINESS'],editorialMaterialModes:modes,
+ context:()=>({period:current}),nextEditorialContext:()=>({period:next}),prompt:()=> '\n\n編集コンテキスト：\n{}'};
+ctx.nextEditorialPrompt=()=>ctx.prompt('ten-day');
+vm.createContext(ctx);
+vm.runInContext(between('function tenDayJsonGuide(period){','window.editorialPlanner='),ctx);
+const exampleFrom=text=>{const start=text.indexOf('\n{"schema":');assert(start>=0,'JSON例');return JSON.parse(text.slice(start+1,text.indexOf('\n\n編集コンテキスト：\n',start)));};
+const prompt=ctx.prompt('ten-day'),example=exampleFrom(prompt),nextExample=exampleFrom(ctx.nextEditorialPrompt());
+assert.match(prompt,/period\.days/);
+assert.match(prompt,/本文だけで500文字以上/);
+assert.match(prompt,/SKU IDだけを使い/);
+assert.match(prompt,/Story2のkindが通常・会話なら質問は不要/);
+assert.equal(example.plans[0].date,current.days[0].date);
+assert.equal(nextExample.plans[0].date,next.days[0].date);
+assert.equal(nextExample.plans[0].dayNumber,next.days[0].dayNumber);
+assert([...example.plans[0].mainPostBody].length>=500,'JSON例の本文も500文字以上');
+const validCtx={SCHEMA:ctx.SCHEMA,validAxes:ctx.validAxes,V7_OFFICIAL_TOPICS:[],sku:id=>id==='sku-valid'?{id}:null,
+ short:date=>date,dayAdd,dayDiff:(date,from)=>(Date.parse(date+'T12:00:00Z')-Date.parse(from+'T12:00:00Z'))/86400000,
+ importPeriod:()=>({from:current.days[0].date,to:current.days[9].date,dayFrom:1}),warnings:()=>[],qualityAudit:()=>({issues:[]})};
+vm.createContext(validCtx);
+vm.runInContext(between('function answerable(','function storyQuality('),validCtx);
+vm.runInContext(between('function validateEditorialShots(','function openImport('),validCtx);
+const full=()=>({schema:ctx.SCHEMA,scope:'ten-day',plans:current.days.map(day=>({...structuredClone(example.plans[0]),date:day.date,dayNumber:day.dayNumber}))});
+assert.equal(validCtx.validate(full()).length,0,'正常な10日JSONは取り込み検査を通る');
+const badMode=full();badMode.plans[2].story3.materialMode='撮影する';
+assert.throws(()=>validCtx.validate(badMode),/Story3.*materialMode/);
+const shortBody=full();shortBody.plans[4].mainPostBody='短い本文';
+assert.throws(()=>validCtx.validate(shortBody),/500文字以上/);
+const wrongDay=full();wrongDay.plans[5].dayNumber=99;
+assert.throws(()=>validCtx.validate(wrongDay),/Day/);
+const wrongSku=full();wrongSku.plans[6].products=['商品名'];
+assert.throws(()=>validCtx.validate(wrongSku),/商品ID/);
+const missingStory=full();delete missingStory.plans[7].story4;
+assert.throws(()=>validCtx.validate(missingStory),/Story4/);
+assert.match(html,/chatgpt-editorial\.js\?ten-day-json-guide=20261114/,'キャッシュ対策の参照を維持');
+console.log('PASS ten-day JSON guide: current/next examples, valid 10 days, materialMode/body/Day/SKU/Story errors');
