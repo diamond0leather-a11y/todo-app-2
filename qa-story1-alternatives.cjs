@@ -9,7 +9,7 @@ const page=fs.readFileSync(path.join(__dirname,'dist/index.html'),'utf8');
 const editorial=fs.readFileSync(path.join(__dirname,'dist/chatgpt-editorial.js'),'utf8');
 const sync=fs.readFileSync(path.join(__dirname,'dist/firebase-sync.js'),'utf8');
 assert(editorial.includes('毎日ひとつ、誰かに話したくなる発見')&&source.includes('毎日ひとつ、誰かに話したくなる発見'),'10日生成と候補選択に同じ正式コンセプトを使用');
-assert.match(page,/<script src="\.\/story1-alternatives\.js\?story1-discovery-picker=20261123"><\/script>/,'published page loads Story1 alternatives');
+assert.match(page,/<script src="\.\/story1-alternatives\.js\?story1-discovery=20261123"><\/script>/,'published page loads Story1 alternatives');
 const story1={slot:1,theme:'old Story1',text:'original',skuIds:[],storySpecVersion:3};
 const post={id:'post-today',date:'2026-11-23',revision:2,theme:'Feed theme',format:'Reel',caption:'Feed caption',skuIds:['sku-1'],shots:[{id:'shot-1'}],stories:[story1,{slot:2,text:'Story2',skuIds:[]},{slot:3,text:'Story3',skuIds:[]},{slot:4,text:'Story4',skuIds:[]}]};
 let state={categories:[{id:'cat-1'}],items:[{id:'item-1'}],skus:[{id:'sku-1'}],posts:[post],records:{'post-today|7d':{views:20}},months:{'2026-10':{date:'2026-10-04'}},reactions:[]};
@@ -34,6 +34,7 @@ for(const candidate of bank){
   assert.match(candidate.imageInstruction,/権利条件を確認/,'image rights are not assumed');
   assert(candidate.publishedAt<='2026-11-23','source is already available on the target date');
   assert.match(candidate.sourceUrl,/^https:\/\//,'source URL is HTTPS');
+  for(const field of ['fact','meaning','outcome','evidenceHint'])assert(candidate.discovery[field],`${candidate.id} ${field}`);
 }
 const candidates=context.story1Alternatives(post);
 assert.equal(candidates.length,5,'five alternatives for today');
@@ -73,6 +74,8 @@ assert.equal(post.stories[0].text,choice.body);
 assert.equal(post.stories[0].asset,choice.imageInstruction);
 assert.equal(post.stories[0].sourceName,choice.sourceName);
 assert.equal(post.stories[0].sourceUrl,choice.sourceUrl);
+assert.equal(post.stories[0].discovery.fact,choice.discovery.fact);
+assert.equal(post.stories[0].researchSources[0].evidenceHint,choice.discovery.evidenceHint);
 assert(post.stories[0].id,'replacement receives a Story ID');
 assert.equal(post.stories[0].date,'2026-11-23');
 assert.equal(post.storyReplacementHistory[0].story.text,'original','original Story is retained');
@@ -107,6 +110,7 @@ vm.runInContext(storyUi.slice(storyUi.indexOf('function v7StoryReviewLabel('),st
 vm.runInContext(storyUi.slice(storyUi.indexOf('function v7ReplaceStory('),storyUi.indexOf('const v7PreviousDraftPost=')),context);
 const beforePicker=JSON.stringify(state);context.v7ReplaceStory(post.id,0);
 assert.match(pickerHtml,/毎日ひとつ、誰かに話したくなる発見/);
+assert.match(pickerHtml,/何が起きた：.*なぜ面白い：.*結果：.*根拠の箇所：/s,'the picker shows fact, meaning, outcome and source location');
 assert.equal((pickerHtml.match(/name="story1Candidate"/g)||[]).length,4,'Story1 button opens multiple sourced choices');
 assert(pickerHtml.includes('https://www.prada.com/'),'candidate source URL appears in the actual picker');
 assert.equal(JSON.stringify(state),beforePicker,'opening the picker does not save');

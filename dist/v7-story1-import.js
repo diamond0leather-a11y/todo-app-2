@@ -42,7 +42,7 @@
     const rows=stories.map(story=>{
       const problem=story1Problem(demo,story.date),current=storyOn(demo,story.date)[0]?.story;
       const sources=story.researchSources.map(source=>`${source.name} / ${source.url}`).join('\n');
-      return `<article class="card editorial-day-preview"><label class="pick-name"><input type="checkbox" data-story1-date="${html(story.date)}" ${problem?'disabled':''}>${html(short(story.date))} のStory1を更新${problem?'（'+html(problem)+'）':''}</label><details><summary>${html(story.title)}｜本文と出典を見る</summary><p class="tiny muted">現在：${html(current?.text||'未登録')}</p><p class="story-text">${html(story.text)}</p><p class="tiny" style="overflow-wrap:anywhere">出典：${html(sources)}</p><p class="tiny">JSON内の検証状態：${html(story.verificationStatus)}（アプリでは未照合）</p><p class="tiny">素材：${html(story.asset)}／${html(story.materialMode)}</p></details></article>`;
+      return `<article class="card editorial-day-preview"><label class="pick-name"><input type="checkbox" data-story1-date="${html(story.date)}" ${problem?'disabled':''}>${html(short(story.date))} のStory1を更新${problem?'（'+html(problem)+'）':''}</label><details><summary>${html(story.title)}｜本文と出典を見る</summary><p class="tiny muted">現在：${html(current?.text||'未登録')}</p><p class="story-text">${html(story.text)}</p><p class="tiny">事実：${html(story.discovery?.fact||'要確認')}／意味（解釈）：${html(story.discovery?.meaning||'要確認')}／結果：${html(story.discovery?.outcome||'要確認')}</p><p class="tiny" style="overflow-wrap:anywhere">出典：${html(sources)}</p><p class="tiny">根拠の箇所：${html(story.researchSources.map(source=>source.evidenceHint||'要確認').join(' / '))}</p><p class="tiny">JSON内の検証状態：${html(story.verificationStatus)}（アプリでは未照合）</p><p class="tiny">素材：${html(story.asset)}／${html(story.materialMode)}</p></details></article>`;
     }).join('');
     openForm('Story1だけ確認・更新',`<p class="tiny muted">${html(data.period.from)}〜${html(data.period.to)}の10件です。更新したい日だけ選んでください。未選択の日とFeed／Reel・Story2〜4は変更しません。</p>${issues.length?`<details class="card" open><summary>Story1の確認事項 ${issues.length}件</summary>${issues.map(issue=>`<p class="tiny">${html(issue.level)}：${html(issue.text)}</p>`).join('')}</details>`:''}${rows}<p class="tiny muted">確定済み・手動編集済みのStory1も、選択して確認するまで変更しません。出典URLの内容はアプリでは照合できないため、投稿前に人が確認してください。</p>`,()=>{saveStory1Review();return false;});
     dx('#workForm .save-foot button').textContent='選んだStory1を確認して保存';
@@ -58,7 +58,7 @@
     if(story1Saving||!story1Review)return;
     const form=dx('#workForm'),alert=dx('#workError'),button=form.querySelector('.save-foot button'),dates=[...form.querySelectorAll('[data-story1-date]:checked')].map(input=>input.dataset.story1Date);
     if(!dates.length){alert.textContent='更新する日を選んでください。';return;}
-    if(!confirm(`${dates.length}日分のStory1だけを更新します。本文と出典を確認しましたか？`))return;
+    if(!confirm(`${dates.length}日分のStory1だけを更新します。事実・意味・結果と出典の該当箇所を確認しましたか？`))return;
     const review=story1Review;story1Saving=true;button.disabled=true;button.textContent='共有保存を確認中…';alert.textContent='';
     try{
       validateStory1Review(review.data,demo);verifyCurrent(review,dates);

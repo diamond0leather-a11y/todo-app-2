@@ -22,9 +22,9 @@ const context={window:{todo2SyncBridge:{read:()=>clone(app),replace:next=>{app=c
   runTransaction:async(_db,handler)=>{const writes=[];const result=await handler({get:async ref=>({exists:()=>remote.has(ref),data:()=>clone(remote.get(ref))}),set:(ref,value)=>writes.push([ref,clone(value)])});if(failed)throw Error('mock-write-failed');for(const [ref,value] of writes){remote.set(ref,value);writeCount++;}return result;},
   serverTimestamp:()=>({seconds:1}),status:message=>{statusText=message;},
   storyDayEntries:rows=>{const keys=new Set();for(const row of rows){const key=row.date+'|'+row.slot;if(keys.has(key))throw Error('duplicate');keys.add(key);}},
-  TextEncoder,crypto:{randomUUID:()=> 'new-story-id'},Error,Set,Map,JSON};
+  TextEncoder,structuredClone,crypto:{randomUUID:()=> 'new-story-id'},Error,Set,Map,JSON};
 vm.createContext(context);vm.runInContext(source,context);
-const proposal={date:'2026-11-09',slot:1,category:'文化',title:'出典つき',text:'新しいStory https://example.test',action:'見る',asset:'元素材',materialMode:'既存',skuIds:[],researchSources:[{name:'資料',url:'https://example.test'}],verificationStatus:'verified'};
+const proposal={date:'2026-11-09',slot:1,category:'文化',title:'出典つき',text:'新しいStory https://example.test',discovery:{fact:'起きたこと',meaning:'背景の意味',outcome:'結果未確認'},action:'見る',asset:'元素材',materialMode:'既存',skuIds:[],researchSources:[{name:'資料',url:'https://example.test',evidenceHint:'該当見出し'}],verificationStatus:'unverified'};
 async function run(){
  failed=true;await assert.rejects(context.window.todo2SyncBridge.saveStory1Selection([{date:proposal.date,story:proposal}]),/mock-write-failed/);
  assert.equal(writeCount,0);assert.equal(app.storyDays[0].text,'元のStory');assert.equal(remote.get('state/settings').value.storyDays[0].text,'元のStory');
@@ -32,6 +32,7 @@ async function run(){
  remote.set('voices/qa-reaction',{entityId:'qa-reaction',value:{sourceStory:{storyId:'story-1'}}});await assert.rejects(context.window.todo2SyncBridge.saveStory1Selection([{date:proposal.date,story:proposal}]),/反応/);remote.delete('voices/qa-reaction');
  failed=false;await context.window.todo2SyncBridge.saveStory1Selection([{date:proposal.date,story:proposal}]);
  assert.equal(writeCount,1);assert.equal(app.storyDays[0].text,proposal.text);assert.equal(app.storyDays[0].aiPendingReview,false);assert.equal(app.storyDays[1].text,'守るStory2');assert.equal(app.posts[0].caption,'元の本文');assert.equal(app.posts[0].shots[0].id,'cut-1');assert.equal(app.storyDays[0].researchSources[0].url,'https://example.test');
+ assert.equal(app.storyDays[0].discovery.outcome,'結果未確認');assert.equal(app.storyDays[0].researchSources[0].evidenceHint,'該当見出し');
  const after=clone(app);remote.get('state/settings').value.storyDays[0].text='別端末の変更';await assert.rejects(context.window.todo2SyncBridge.saveStory1Selection([{date:proposal.date,story:{...proposal,text:'また変更'}}]),/sync-conflict/);assert.equal(JSON.stringify(app),JSON.stringify(after));
  console.log('PASS Story1 settings transaction: atomic failure, selected-only update, other data preserved');
 }

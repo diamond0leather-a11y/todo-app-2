@@ -1,6 +1,7 @@
 (function(root){
  'use strict';
  const clean=value=>String(value||'').trim();
+ const guidance='Story1は「毎日ひとつ、誰かに話したくなる発見。」です。本文と企画に①何が起きたか（具体的な事実）②なぜ面白いか（背景・意外性・意味）③その結果どうなったか（確認できた変化・影響）を含めてください。結果が不明なら「結果未確認」と明示し、観測していない影響を作らないでください。story1.discoveryにfact・meaning・outcomeを短く記し、本文にもそのつながりを伝えてください。感想・問いかけ・商品発売の事実だけで終わらせないでください。researchSourcesには出典名と根拠の該当箇所を直接確認できる記事・資料URLを入れ、該当箇所の見出しや検索語をevidenceHintに短く記してください。出典の長い転載は禁止です。確認済みの事実と編集者の解釈を分け、URLがあるだけで確認済みとはしません。アプリが出典を照合できない場合、verificationStatusはunverifiedです。';
  const similarity=(a,b)=>{const grams=value=>{const text=clean(value).replace(/[\s、。！？・「」]/g,'');return new Set(Array.from({length:Math.max(0,text.length-1)},(_,i)=>text.slice(i,i+2)))};const left=grams(a),right=grams(b);if(!left.size||!right.size)return 0;return [...left].filter(value=>right.has(value)).length/Math.min(left.size,right.size)};
  const group=value=>{const text=clean(value);if(/ファッション|服|装い/.test(text))return 'ファッション';if(/デザイン|建築|家具|インテリア/.test(text))return 'デザイン・建築';if(/AI|テクノロジー|技術/.test(text))return 'AI・テクノロジー';if(/音楽|映画|アニメ|カルチャー|文化|美術|アート|本|出版/.test(text))return 'カルチャー';if(/暮らし|生活|食|旅|街|地域|社会/.test(text))return '暮らし・日常';return ''};
  function audit(stories){
@@ -14,6 +15,10 @@
    const length=[...text].length;if(length<40||length>60)add('要確認',date,`本文は${length}文字です。目安は40〜60文字ですが、事実の正確さを優先して確認してください。`);
    const hasSource=Array.isArray(sources)&&sources.some(source=>source&&clean(source.name||source.title||source.publisher)&&/^https?:\/\/\S+$/i.test(clean(source.url)));
    if(!hasSource)add('要確認',date,'出典名とURLが不足しています。事実確認前の案として扱い、投稿前に確認してください。');
+   const discovery=story.discovery||{};
+   if(!clean(discovery.fact)||!clean(discovery.meaning)||!clean(discovery.outcome))add('要確認',date,'「何が起きた・なぜ面白い・結果／結果未確認」の3要素を本文と出典で確認してください。');
+   if(/思い出すとき|記憶に残ることがあります|かもしれない|見直してみたい|考えてみましょう|気になりますか[？?]?|どう思いますか[？?]?/u.test(text)||/^[^。！？]*[？?]$/u.test(text))add('要確認',date,'一般的な感想・問いかけだけに見えます。具体的な事実と意味を確認してください。');
+   if(hasSource&&!sources.some(source=>clean(source.evidenceHint)))add('要確認',date,'出典のどの箇所が根拠か確認してください。URLだけでは事実確認済みになりません。');
    if(clean(story.verificationStatus)==='verified')add('要確認',date,'確認済みの指定があります。アプリはURLの内容を照合していないため、人が出典と本文を確認してください。');
    if(/商品紹介|販売告知|革の豆知識|革の手入れ|製法/.test(title+' '+text))productDays++;
    if(i){const prev=sorted[i-1],previousTitle=clean(prev.title||prev.theme),previousText=clean(prev.text),previousCategory=group(prev.category||prev.genre);
@@ -24,7 +29,8 @@
    }
   }
   if(sorted.length>=10){for(const [category,count] of Object.entries(counts))if(count>=7)issues.push({level:'要確認',text:`10日間のStory1：${category}が${count}件です。ジャンルの偏りを確認してください。`});if(productDays>=5)issues.push({level:'要確認',text:`10日間のStory1：商品紹介・販売・革知識の話題が少なくとも${productDays}件あります。独立した情報コンテンツになっているか確認してください。`});}
+  if(sorted.length)issues.push({level:'要確認',text:'Story1の事実・意味・結果と出典の該当箇所が対応するか、人が確認してください。URLの存在だけでは確認済みになりません。'});
   return issues;
  }
- root.V7Story1Policy={audit};
+ root.V7Story1Policy={audit,guidance};
 })(typeof window==='object'?window:globalThis);

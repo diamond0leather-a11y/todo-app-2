@@ -1721,7 +1721,7 @@ makeStories=function(post){
  const available=typeof story1Alternatives==='function'?story1Alternatives(post):[];
  const candidate=available.length?available[index%available.length]:null;
  const text=candidate?candidate.body:`${theme}は調査待ちです。出典で具体的な事実と、誰かに話したくなる発見を確認するまで本文にしません。`;
- stories[0]={slot:1,purpose:STORY_ROLES[0],genre:candidate?.genre||genre,theme:candidate?.title||theme,text,asset:candidate?.imageInstruction||'出典と画像の使用条件を確認し、題材に合う写真1枚を準備',action:'面白かった発見を誰かに話す',skuIds:[],participatory:false,materialMode:'新規撮影必要',researchRequired:true,researchSources:candidate?[{name:candidate.sourceName,url:candidate.sourceUrl}]:[],verificationStatus:'unverified',...(candidate?{alternativeId:candidate.id}:{}),researchBrief:'出典と掲載日、本文の事実、写真の使用条件を投稿前に確認してください。アプリは最新情報を自動調査しません。',storySpecVersion:4};
+ stories[0]={slot:1,purpose:STORY_ROLES[0],genre:candidate?.genre||genre,theme:candidate?.title||theme,text,discovery:candidate?.discovery?{...candidate.discovery}:undefined,asset:candidate?.imageInstruction||'出典と画像の使用条件を確認し、題材に合う写真1枚を準備',action:'面白かった発見を誰かに話す',skuIds:[],participatory:false,materialMode:'新規撮影必要',researchRequired:true,researchSources:candidate?[{name:candidate.sourceName,url:candidate.sourceUrl,evidenceHint:candidate.discovery?.evidenceHint||''}]:[],verificationStatus:'unverified',...(candidate?{alternativeId:candidate.id}:{}),researchBrief:'出典と掲載日、本文の事実、写真の使用条件を投稿前に確認してください。アプリは最新情報を自動調査しません。',storySpecVersion:4};
  return stories;
 };
 function storyPollRequired(s,i){return i===1&&/アンケート|二択|どちら|どっち|選んで/.test([s.kind,s.text,s.action].join(' '));}
@@ -1874,8 +1874,8 @@ function correctNoPost(id){const post=demo.posts.find(p=>p.id===id&&p.noPostConf
 document.addEventListener('click',e=>{const correction=e.target.closest('[data-work-no-post-correct]');if(correction){e.preventDefault();e.stopImmediatePropagation();correctNoPost(correction.dataset.workNoPostCorrect);return;}const button=e.target.closest('[data-work-review-date]');if(!button)return;e.preventDefault();e.stopImmediatePropagation();reviewDate=button.dataset.workReviewDate;homeReviewFilter=null;renderReviewWork();const noPost=demo.posts.filter(p=>p.noPostConfirmedAt&&!p.deleted&&noPostCalendarDate(p)===reviewDate);if(noPost.length===1){correctNoPost(noPost[0].id);return;}const saved=reviewCalendarTasks(reviewDate).filter(t=>t.stage==='7d'&&reviewRecordForTask(t));if(saved.length===1)editRecord(saved[0].key);else dx('#todayRecordsWork').scrollIntoView({block:'start'});},true);
 </script>
 <script src="./period-planner.js"></script>
-<script src="./v7-story1-policy.js?story1-policy=20261123"></script>
-<script src="./chatgpt-editorial.js?ten-day-json-guide-modes=20261123"></script>
+<script src="./v7-story1-policy.js?story1-discovery=20261123"></script>
+<script src="./chatgpt-editorial.js?story1-discovery=20261123"></script>
 <script>
 let firebaseSyncApplying=false;const firebaseLocalPersist=persist;persist=function(){if(!firebaseSyncApplying&&window.todo2SyncBridge?.stage)window.todo2SyncBridge.stage(window.todo2SyncBridge.read());firebaseLocalPersist();if(!firebaseSyncApplying&&window.todo2SyncBridge)window.dispatchEvent(new CustomEvent('todo2:local-save',{detail:{state:window.todo2SyncBridge.read()}}));};
 window.todo2SyncBridge={read:()=>structuredClone(demo),emptyState:()=>structuredClone(emptyV7State()),replace:state=>{firebaseSyncApplying=true;try{demo=structuredClone(state);try{localStorage.setItem(MOCK_KEY,JSON.stringify(demo));}catch{}storyDrafts?.clear?.();refreshWork();}finally{firebaseSyncApplying=false;}}};
@@ -1913,9 +1913,9 @@ const v7ShowPost=showPost;showPost=function(id){
 document.head.insertAdjacentHTML('beforeend','<style>#dayDetail .v7-post-block{min-width:0;overflow-wrap:anywhere;margin:16px 0;padding:12px;border:1px solid #d6dccb;border-radius:12px}#dayDetail .v7-post-block>h3{font-size:17px;margin:0 0 10px}#dayDetail .v7-post-block details{max-width:100%}#dailyToday [data-v7-catalog-link]{margin-top:10px}#dailyExtras [data-v7-shoot-link]{margin:8px 0 12px}</style>');
 </script>
 <script src="./story-replacement-safety.js"></script>
-<script src="./story1-alternatives.js?story1-discovery-picker=20261123"></script>
+<script src="./story1-alternatives.js?story1-discovery=20261123"></script>
 <script src="./v7-story-ui.js?story1-discovery-picker=20261123"></script>
-<script src="./v7-story1-import.js?story1-review=20261110"></script>
+<script src="./v7-story1-import.js?story1-discovery=20261123"></script>
 <script>
 // v7.1: read-only daily execution view. Existing post, Story and shot editors remain the only edit paths.
 dx('main').insertAdjacentHTML('beforeend',`<section class="view execution-view" id="view-execution"><div class="section-head execution-head"><div><div class="section-kicker">TODAY</div><h2>今日の実行内容</h2></div><button type="button" class="icon-btn" data-nav="home" aria-label="HOMEへ戻る">×</button></div><p id="executionDate" class="muted"></p><div id="executionContent"></div><button type="button" class="ghost full" data-nav="home">HOMEへ戻る</button></section>`);
@@ -2398,6 +2398,6 @@ document.addEventListener('click',event=>{
 },true);
 </script>
 <script src="./firebase-config-v7.js"></script>
-<script type="module" src="./firebase-sync.js?ten-day-bulk-replace=20261111"></script>
+<script type="module" src="./firebase-sync.js?story1-discovery=20261123"></script>
 </body>
 </html>

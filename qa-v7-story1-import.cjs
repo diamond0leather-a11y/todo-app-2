@@ -4,7 +4,7 @@ const vm=require('node:vm');
 const path=require('node:path');
 const source=fs.readFileSync(path.join(__dirname,'dist/v7-story1-import.js'),'utf8');
 const days=Array.from({length:10},(_,index)=>`2026-11-${String(index+9).padStart(2,'0')}`);
-const story=date=>({date,slot:1,category:'文化',title:'検証済みの話題',text:'確認済みの本文 https://example.test/source',action:'知る',asset:'写真',materialMode:'既存素材',skuIds:[],researchSources:[{name:'資料',url:'https://example.test/source'}],verificationStatus:'verified'});
+const story=date=>({date,slot:1,category:'文化',title:'確認対象の話題',text:'確認対象の本文 https://example.test/source',discovery:{fact:'起きたこと',meaning:'背景の意味',outcome:'結果未確認'},action:'知る',asset:'写真',materialMode:'既存素材',skuIds:[],researchSources:[{name:'資料',url:'https://example.test/source',evidenceHint:'該当見出し'}],verificationStatus:'unverified'});
 const data={schema:'cian-story1-verified-review-v1',scope:'story1-only',period:{from:days[0],to:days[9]},stories:days.map(story)};
 let body='',submit,selected=[],calls=[],failure=false,alert={textContent:''};
 const button={disabled:false,textContent:''},form={querySelector:()=>button,querySelectorAll:()=>selected.map(date=>({dataset:{story1Date:date}}))},dialog={close(){this.closed=true;}};
@@ -26,7 +26,7 @@ assert.throws(()=>check.validate({...data,stories:data.stories.map((row,index)=>
 assert.throws(()=>check.validate({...data,stories:data.stories.map((row,index)=>index===0?{...row,researchSources:[{name:'資料',url:'invalid'}]}:row)},state),/出典/);
 assert.throws(()=>check.validate({...data,stories:data.stories.map((row,index)=>index===0?{...row,skuIds:['missing']}:row)},state),/SKU/);
 assert.equal(check.accepts({schema:'cian-editorial-v1',scope:'ten-day'}),false);
-check.show(data);assert.equal((body.match(/data-story1-date=/g)||[]).length,10);assert(body.includes('https://example.test/source'));
+check.show(data);assert.equal((body.match(/data-story1-date=/g)||[]).length,10);assert(body.includes('https://example.test/source'));assert(body.includes('事実：起きたこと')&&body.includes('根拠の箇所：該当見出し'));
 assert.equal(check.problem(state,days[0]),'');state.posts[0].actualAt='2026-11-09T10:00:00+09:00';assert.match(check.problem(state,days[0]),/実績/);delete state.posts[0].actualAt;
 state.reactions.push({sourceStory:{storyId:'s0'}});assert.match(check.problem(state,days[0]),/反応/);state.reactions=[];
 async function run(){

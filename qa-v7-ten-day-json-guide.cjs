@@ -69,5 +69,5 @@ const ambiguous=full();ambiguous.plans[0].story1.materialMode='手持ち素材�
 assert.throws(()=>importCtx.routeEditorialImport(ambiguous),/Story1のmaterialModeの値「手持ち素材・まとめ撮り優先」/,'意味が曖昧な素材区分を補完せず、日付・枠・項目・値を表示');
 const absent=full();delete absent.plans[0].story1.asset;
 assert.throws(()=>importCtx.routeEditorialImport(absent),/asset/,'内容の欠落は補完しない');
-assert.match(html,/chatgpt-editorial\.js\?ten-day-json-guide-modes=20261123/,'キャッシュ対策の参照を維持');
+assert.match(html,/chatgpt-editorial\.js\?story1-discovery=20261123/,'キャッシュ対策の参照を維持');
 console.log('PASS ten-day JSON guide/import: generated example, 10 days, BOM/fence, safe normalization, invalid fields rejected');
