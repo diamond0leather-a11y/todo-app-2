@@ -147,7 +147,7 @@ function themeAudit(plans){const issues=[],ordered=plans.slice().sort((a,b)=>a.d
 }
 function researchSourceText(source){return typeof source==='string'?source:source&&typeof source==='object'?[source.title,source.url,source.publisher].filter(Boolean).join(' / '):'';}
 function researchAudit(plans){return plans.flatMap(plan=>{const topic=V7_OFFICIAL_TOPICS.find(entry=>entry.id===plan.themeId);if(!topic?.researchRequired)return [];return Array.isArray(plan.researchSources)&&plan.researchSources.some(source=>researchSourceText(source).trim().length>=10)?[{level:'注意',text:`${short(plan.date)}：該当テーマの出典をプレビューで人が確認してください。`}]:[{level:'要修正',text:`${short(plan.date)}：該当テーマは出典未確認です。researchSourcesに確認可能な出典を記載してください。`}];});}
-function qualityAudit(plans){const exposure=exposureAudit(plans),posts=plans.filter(plan=>plan.format!=='投稿なし');return {issues:[...storyQuality(plans),...themeAudit(posts),...researchAudit(posts),...exposure.issues],exposure};}
+function qualityAudit(plans){const exposure=exposureAudit(plans),posts=plans.filter(plan=>plan.format!=='投稿なし'),story1=plans.map(plan=>({date:plan.date,...plan.story1}));return {issues:[...storyQuality(plans),...(typeof V7Story1Policy==='undefined'?[]:V7Story1Policy.audit(story1)),...themeAudit(posts),...researchAudit(posts),...exposure.issues],exposure};}
 function importPeriod(data){
  const block=salesCycleBlock();
  if(!block||!Array.isArray(data?.plans)||!data.plans.length)throw Error('対象期間の投稿案がありません。');
@@ -659,7 +659,7 @@ prompt=function(scope){if(scope!=='ten-day')return promptBeforeDailyStories(scop
  .replace('Story2は参加・対話で質問箱／アンケート／二択／クイズを使い分け','Story2は自然な会話を基本とし、必要な日だけ質問箱／アンケート／二択／クイズを使い分け')
   .replace('\n\n編集コンテキスト：\n','\n\n【毎日5件の企画・最優先】投稿不可日も含む対象期間の10日すべてを日付順にplansへ含めてください。毎日FeedまたはReelのどちらか1件だけを提案し、「投稿なし」の企画、同日のFeedとReelの併記、企画の欠落を認めません。各日のメイン本文は500文字以上、メイン投稿の撮影指示をshotsに入れてください。毎日Story1〜4を各1件、合計4件提案し、各枠にtext・asset・action・materialMode・skuIdsを含めます。Story1は毎日見る理由、Story2は会話（毎日質問しない）、Story3は月間販売SKUの補完、Story4はその日のメイン投稿から次の行動への自然な導線です。正式100テーマは番号順に消費せず、引き出しとして使ってください。storyHistoryには投稿しなかった日を含む過去Storyがあります。投稿不可日と「今日は投稿しない」は実際に投稿するかの判断にのみ使い、企画は消さず、保存・採用は利用者が決めます。既存の確定済み企画は上書きしません。\n\n'+story1MediaRule+'\n\n編集コンテキスト：\n');};
  const singlePromptBeforeStory1Media=singlePrompt;
- singlePrompt=function(post){return singlePromptBeforeStory1Media(post)+'\n\n'+story1MediaRule;};
+ singlePrompt=function(post){return singlePromptBeforeStory1Media(post).replace('Story1は知識・有益・楽しさ','Story1はファッション・デザイン・文化・暮らしなどの独立した発見')+'\n\n'+story1MediaRule;};
  const newMainPostRule='【新規Feed・Reelの編集方針】革職人が説明したい技術より、初めて見るお客様が見たい・知りたい・使いたい・選びたい内容を優先してください。財布やバッグを使う楽しさ、ファッションとの組み合わせ、商品選びの比較、お客様の疑問、ものづくりの面白さ、素材の意外な発見、ブランドの世界観を10日間で混ぜてください。革の製法やお手入れを毎日の主題にせず、商品紹介だけにも偏らせないでください。直近の投稿・Storyと同じ結論やCTAを続けず、購入予定のない人にも発見や楽しさがあるか確認してください。CUSTOMER VALUE・INSTAGRAM GROWTH・BUSINESSの3軸、正式100テーマ、販売周期・SKU情報を維持し、各日の本文500文字以上、基本3カットの実行できる撮影指示を守ってください。既存の確定済み本文は変更しません。';
   const promptBeforeMainPostRule=prompt;
   prompt=function(scope){const text=promptBeforeMainPostRule(scope);return scope==='ten-day'?text.replace('\n\n編集コンテキスト：\n','\n\n'+newMainPostRule+'\n\n編集コンテキスト：\n'):text;};
@@ -673,7 +673,7 @@ prompt=function(scope){if(scope!=='ten-day')return promptBeforeDailyStories(scop
   return `【取り込み用JSONの必須仕様】返答はJSONオブジェクト1個だけ。説明文・コードフェンス・コメント・末尾の余分な文字を付けません。schemaは${SCHEMA}、scopeはten-day、plansは対象期間の全日を日付順に1件ずつ入れます。各dateは編集コンテキストのperiod.daysの日付と完全一致し、dayNumberも同じ日の値を使います。日付の欠落・重複・期間外を禁止します。\n各planにformat（FeedまたはReelのみ）、primaryPurpose（${validAxes.join('／')}のいずれか）、customerValue、mainTopic、mainPostBody（本文だけで500文字以上）、products（SKU IDの配列。商品なしなら[]）、shots（1〜30件）、story1〜story4を入れます。themeIdはofficialTopics内の正式IDかnull。themeCategoryを入れる場合はそのテーマの分類と一致させます。\n各shotはmedia（写真または動画）、空でないwhat、整数のcount（1〜20）、skuIds（SKU IDの配列）を入れます。各Storyは空でないtext・asset・action、materialMode（${editorialMaterialModes.join('／')}のいずれか）、skuIds（SKU IDの配列）を入れます。materialModeはこの3値のどれか1つだけを正確に書きます。「手持ち素材・まとめ撮り優先」「メイン投稿素材から流用可」のような組合せや説明文はmaterialModeに入れず、素材の説明はassetに書いてください。productsとskuIdsには編集コンテキストのproductsにあるSKU IDだけを使い、商品名をID欄に入れません。\nStory2のkindが通常・会話なら質問は不要です。アンケート・二択なら質問と異なる選択肢2つをoptionsに、クイズなら質問・2つ以上の選択肢・correctAnswer・同じStory内のanswerLocationを入れます。\n次は構造を示す初日1件のJSON例です。本文は500文字以上ですが、文章や商品をそのまま再利用せず、期間中の全日について別々の内容にしてください。\n${JSON.stringify(example)}`;
  }
  const promptBeforeJsonGuide=prompt;
- prompt=function(scope){const text=promptBeforeJsonGuide(scope);return scope==='ten-day'?text.replace('\n\n編集コンテキスト：\n',`\n\n${tenDayJsonGuide(context(scope).period)}\n\n編集コンテキスト：\n`):text;};
+  prompt=function(scope){const text=promptBeforeJsonGuide(scope);return scope==='ten-day'?text.replace('Story1：見たい・知りたい・役立つ・楽しむにつながる毎日見る理由。','Story1：毎日ひとつ、誰かに話したくなる発見。商品紹介や革の授業に偏らない独立した情報コンテンツ。').replace('Story1はメイン投稿の要約ではなく、その日に見る理由を作る。','Story1はメイン投稿の要約ではなく、ファッション・デザイン・文化・暮らしなどの発見を伝える。').replace('\n\n編集コンテキスト：\n',`\n\n${tenDayJsonGuide(context(scope).period)}\n\n編集コンテキスト：\n`):text;};
  const nextPromptBeforeJsonGuide=nextEditorialPrompt;
  nextEditorialPrompt=function(){const next=tenDayJsonGuide(nextEditorialContext().period);return nextPromptBeforeJsonGuide().replace(/【取り込み用JSONの必須仕様】[\s\S]*?(?=\n\n編集コンテキスト：\n)/,next);};
  window.editorialPlanner={context,prompt,nextContext:nextEditorialContext,nextPrompt:nextEditorialPrompt,extract,validate,warnings,singleContext,singlePrompt,validateSingle,periodReview,openImport};refreshWork();

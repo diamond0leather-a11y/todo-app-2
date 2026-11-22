@@ -28,6 +28,7 @@
       if(seen.has(date))throw Error(`${date}：Story1が重複しています。`);seen.add(date);
       if(story.slot!==1)throw Error(`${date}：slotは1にしてください。`);
       for(const field of ['category','title','text','action','asset','materialMode','verificationStatus'])if(typeof story[field]!=='string'||!story[field].trim())throw Error(`${date}：${field}が未設定です。`);
+      if(!['verified','unverified'].includes(story.verificationStatus))throw Error(`${date}：Story1のverificationStatusはverifiedまたはunverifiedにしてください。アプリは出典の内容を自動検証しません。`);
       if(!Array.isArray(story.skuIds)||story.skuIds.some(id=>typeof id!=='string'||!state.skus?.some(sku=>sku.id===id&&!sku.deleted)))throw Error(`${date}：skuIdsに商品管理にないSKUがあります。`);
       if(!Array.isArray(story.researchSources)||!story.researchSources.length||story.researchSources.some(source=>!source||typeof source.name!=='string'||!source.name.trim()||typeof source.url!=='string'||!/^https?:\/\/[^\s]+$/i.test(source.url)))throw Error(`${date}：出典名またはURLを確認してください。`);
     }
@@ -36,13 +37,14 @@
   }
   function showStory1Review(data){
     const stories=validateStory1Review(data,demo);
+    const issues=window.V7Story1Policy?.audit(stories)||[];
     story1Review={data,stories,snapshot:structuredClone(demo),selected:new Set()};
     const rows=stories.map(story=>{
       const problem=story1Problem(demo,story.date),current=storyOn(demo,story.date)[0]?.story;
       const sources=story.researchSources.map(source=>`${source.name} / ${source.url}`).join('\n');
-      return `<article class="card editorial-day-preview"><label class="pick-name"><input type="checkbox" data-story1-date="${html(story.date)}" ${problem?'disabled':''}>${html(short(story.date))} のStory1を更新${problem?'（'+html(problem)+'）':''}</label><details><summary>${html(story.title)}｜本文と出典を見る</summary><p class="tiny muted">現在：${html(current?.text||'未登録')}</p><p class="story-text">${html(story.text)}</p><p class="tiny" style="overflow-wrap:anywhere">出典：${html(sources)}</p><p class="tiny">検証状態：${html(story.verificationStatus)}</p><p class="tiny">素材：${html(story.asset)}／${html(story.materialMode)}</p></details></article>`;
+      return `<article class="card editorial-day-preview"><label class="pick-name"><input type="checkbox" data-story1-date="${html(story.date)}" ${problem?'disabled':''}>${html(short(story.date))} のStory1を更新${problem?'（'+html(problem)+'）':''}</label><details><summary>${html(story.title)}｜本文と出典を見る</summary><p class="tiny muted">現在：${html(current?.text||'未登録')}</p><p class="story-text">${html(story.text)}</p><p class="tiny" style="overflow-wrap:anywhere">出典：${html(sources)}</p><p class="tiny">JSON内の検証状態：${html(story.verificationStatus)}（アプリでは未照合）</p><p class="tiny">素材：${html(story.asset)}／${html(story.materialMode)}</p></details></article>`;
     }).join('');
-    openForm('Story1だけ確認・更新',`<p class="tiny muted">${html(data.period.from)}〜${html(data.period.to)}の10件です。更新したい日だけ選んでください。未選択の日とFeed／Reel・Story2〜4は変更しません。</p>${rows}<p class="tiny muted">確定済み・手動編集済みのStory1も、選択して確認するまで変更しません。</p>`,()=>{saveStory1Review();return false;});
+    openForm('Story1だけ確認・更新',`<p class="tiny muted">${html(data.period.from)}〜${html(data.period.to)}の10件です。更新したい日だけ選んでください。未選択の日とFeed／Reel・Story2〜4は変更しません。</p>${issues.length?`<details class="card" open><summary>Story1の確認事項 ${issues.length}件</summary>${issues.map(issue=>`<p class="tiny">${html(issue.level)}：${html(issue.text)}</p>`).join('')}</details>`:''}${rows}<p class="tiny muted">確定済み・手動編集済みのStory1も、選択して確認するまで変更しません。出典URLの内容はアプリでは照合できないため、投稿前に人が確認してください。</p>`,()=>{saveStory1Review();return false;});
     dx('#workForm .save-foot button').textContent='選んだStory1を確認して保存';
   }
   function verifyCurrent(review,dates){
