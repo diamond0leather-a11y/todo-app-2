@@ -16,8 +16,13 @@ assert(fashionDesign>=4&&fashionDesign<=7,'fashion/design remain a flexible cent
 assert(genres.has('AI・テクノロジー')&&genres.has('音楽・映画・カルチャー')&&genres.has('暮らし・日常'),'ten days include AI, culture and daily life');
 assert(new Set(first.map(story=>story.theme)).size>=8,'topics do not repeat a small fixed set');
 assert(generated.every(story=>story.text.length>=40&&story.text.length<=60),`Story1 text length: ${generated.map(story=>story.text.length).join(',')}`);
-assert(generated.every(story=>story.researchRequired&&story.verificationStatus==='unverified'&&!story.researchSources.length&&!story.skuIds.length&&story.text.includes('要確認')),'unverified facts are not published as checked');
+assert(generated.every(story=>story.researchRequired&&story.verificationStatus==='unverified'&&!story.researchSources.length&&!story.skuIds.length&&story.text.includes('調査待ち')),'without a source, the app shows a research task instead of a generic finished Story');
 assert(generated.every(story=>!story.text.includes('http')),'unverified URLs are not invented');
+context.story1Alternatives=()=>[{genre:'デザイン・建築',title:'美術館前の池の雨水',body:'Vitra美術館前の池には、隣の工場の屋根に降った雨を利用。風景と暑さ対策を一緒に考えた。',imageInstruction:'池の写真1枚',sourceName:'Vitra',sourceUrl:'https://www.vitra.com/ja-jp/campus/architecture/water-garden'}];
+const sourced=context.makeStories({date:'2026-11-23'})[0];
+assert.match(sourced.text,/Vitra美術館前の池/,'a sourced candidate becomes the displayed discovery');
+assert.equal(sourced.researchSources[0].name,'Vitra');
+assert.equal(sourced.verificationStatus,'unverified','a source URL alone does not mean checked');
 assert.equal(saved.stories[0].text,'確定済みStory1');assert.equal(saved.stories[1].text,'Story2');assert.equal(saved.caption,'確定済み本文');
 for(const term of ['毎日ひとつ、誰かに話したくなる発見','AI・テクノロジー','50文字前後','直近1か月以内','researchSources','verificationStatus','unverified','Story1専用JSON','保存済みStory1は変更しません'])assert(editorial.includes(term),`prompt missing: ${term}`);
 assert(!/STORY1_MEDIA_TOPICS/.test(page),'old fixed topic bank removed from generator');

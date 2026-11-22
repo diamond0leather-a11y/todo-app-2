@@ -2,7 +2,7 @@
 const v7PreviousAllTasks=allTasks;
 allTasks=function(){return v7PreviousAllTasks().filter(task=>task.stage==='7d');};
 demo.storyDays ||= [];
-function v7StoryReviewLabel(story){return story.aiPendingReview===true?'AI案・未確認':story.aiPendingReview===false?'確認済み':story.editorialSource==='manual'?'手動編集済み':'確認状態不明';}
+function v7StoryReviewLabel(story){return story.aiPendingReview===true?'AI案・未確認':story.aiPendingReview===false?(story.slot===1&&story.verificationStatus==='unverified'?'企画確認済み・出典要確認':'確認済み'):story.editorialSource==='manual'?'手動編集済み':'確認状態不明';}
 
 function v7StoryEntry(id,index){
   const post=demo.posts.find(value=>value.id===id);
@@ -68,6 +68,7 @@ function v7ReplaceStory(id,index){
   const entry=v7StoryEntry(id,index),old=entry.story;
   if(!old){toast('Storyが見つかりません');return;}
   if(v7StoryActionLocked(entry)){toast('投稿・反応の記録があるStoryは別案に変更できません');return;}
+  if((old.slot??index+1)===1){openStory1AlternativePicker(id,index);return;}
   if(dx('#workDialog').open)dx('#workDialog').close();
   openForm(`Story ${old.slot??index+1}を別案に変更`,v7StoryFields(old),form=>{
     if(v7StoryActionLocked(v7StoryEntry(id,index)))throw Error('Storyの投稿・反応状態が変わりました。別案への変更を中止しました');

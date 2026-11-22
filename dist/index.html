@@ -1718,9 +1718,10 @@ makeStories=function(post){
  const preferred=STORY1_MEDIA_SEQUENCE[index%STORY1_MEDIA_SEQUENCE.length],genres=Object.keys(STORY1_MEDIA_BEATS);
  const genre=genres.slice().sort((a,b)=>((a===preferred?-5:0)+recent.filter(s=>(s.genre||s.category)===a).length*2+(recent[0]&&(recent[0].genre||recent[0].category)===a?4:0))-((b===preferred?-5:0)+recent.filter(s=>(s.genre||s.category)===b).length*2+(recent[0]&&(recent[0].genre||recent[0].category)===b?4:0)))[0];
  const beats=STORY1_MEDIA_BEATS[genre],theme=beats.slice().sort((a,b)=>recent.filter(s=>s.theme===a).length-recent.filter(s=>s.theme===b).length||((beats.indexOf(a)-index%beats.length+beats.length)%beats.length)-((beats.indexOf(b)-index%beats.length+beats.length)%beats.length))[0];
- const evergreen=index%4===0,opening=['意外と知らない、','見慣れたものにも、','なぜ今、','ちょっと気になる、'][index%4];
- const text=`${opening}${theme}の見方。${evergreen?'長く親しまれる理由':'直近の話題と暮らしの接点'}を資料で確かめ、発見を一つ伝えたい。要確認。`;
- stories[0]={slot:1,purpose:STORY_ROLES[0],genre,theme,text,asset:'出典と画像の使用条件を確認し、題材に合う写真1枚を準備',action:'面白かった発見を誰かに話す',skuIds:[],participatory:false,materialMode:'新規撮影必要',researchRequired:true,researchSources:[],verificationStatus:'unverified',researchBrief:`${evergreen?'時代を問わず面白い背景':'企画時点から直近1か月以内の話題'}を、国内外の公式資料・信頼できる報道で調べる。固有名詞、発表日、出来事の日、確認日を分けて記録する。事実と画像の使用条件を確認するまで完成原稿にしない。URL・数字・発言は創作しない。`,storySpecVersion:4};
+ const available=typeof story1Alternatives==='function'?story1Alternatives(post):[];
+ const candidate=available.length?available[index%available.length]:null;
+ const text=candidate?candidate.body:`${theme}は調査待ちです。出典で具体的な事実と、誰かに話したくなる発見を確認するまで本文にしません。`;
+ stories[0]={slot:1,purpose:STORY_ROLES[0],genre:candidate?.genre||genre,theme:candidate?.title||theme,text,asset:candidate?.imageInstruction||'出典と画像の使用条件を確認し、題材に合う写真1枚を準備',action:'面白かった発見を誰かに話す',skuIds:[],participatory:false,materialMode:'新規撮影必要',researchRequired:true,researchSources:candidate?[{name:candidate.sourceName,url:candidate.sourceUrl}]:[],verificationStatus:'unverified',...(candidate?{alternativeId:candidate.id}:{}),researchBrief:'出典と掲載日、本文の事実、写真の使用条件を投稿前に確認してください。アプリは最新情報を自動調査しません。',storySpecVersion:4};
  return stories;
 };
 function storyPollRequired(s,i){return i===1&&/アンケート|二択|どちら|どっち|選んで/.test([s.kind,s.text,s.action].join(' '));}
@@ -1912,8 +1913,8 @@ const v7ShowPost=showPost;showPost=function(id){
 document.head.insertAdjacentHTML('beforeend','<style>#dayDetail .v7-post-block{min-width:0;overflow-wrap:anywhere;margin:16px 0;padding:12px;border:1px solid #d6dccb;border-radius:12px}#dayDetail .v7-post-block>h3{font-size:17px;margin:0 0 10px}#dayDetail .v7-post-block details{max-width:100%}#dailyToday [data-v7-catalog-link]{margin-top:10px}#dailyExtras [data-v7-shoot-link]{margin:8px 0 12px}</style>');
 </script>
 <script src="./story-replacement-safety.js"></script>
-<script src="./story1-alternatives.js"></script>
-<script src="./v7-story-ui.js?execution-story-actions=20261111"></script>
+<script src="./story1-alternatives.js?story1-discovery-picker=20261123"></script>
+<script src="./v7-story-ui.js?story1-discovery-picker=20261123"></script>
 <script src="./v7-story1-import.js?story1-review=20261110"></script>
 <script>
 // v7.1: read-only daily execution view. Existing post, Story and shot editors remain the only edit paths.
@@ -2036,6 +2037,8 @@ renderMonthFolds();
 #story1Alternatives .story1-alternative h4{margin:8px 0 4px}
 #story1Alternatives .story1-alternative .story-text{white-space:pre-wrap}
 #story1Alternatives .story1-alternative a{overflow-wrap:anywhere}
+.story1-alternative input[type=radio]{width:22px;height:22px;margin-right:8px;vertical-align:middle}
+.story1-alternative{display:block;overflow-wrap:anywhere}
 #firebaseLogin{position:fixed;inset:0;z-index:1000;background:#f5f4f0;padding:calc(32px + env(safe-area-inset-top)) 20px 30px;overflow:auto}#firebaseLogin form{max-width:420px;margin:auto;background:#fffef9;border:1px solid #d6dccb;border-radius:16px;padding:24px}#firebaseLogin label{display:block;margin:16px 0}#firebaseLogin input{display:block;width:100%;margin-top:6px}#firebaseLoginError,.sync-error{color:#9c2e29}#firebaseSyncBar{position:fixed;z-index:25;right:8px;top:8px;display:flex;align-items:center;gap:7px;max-width:calc(100% - 16px);padding:5px 8px;background:rgba(255,253,249,.95);border:1px solid #d6dccb;border-radius:9px;font-size:12px;flex-wrap:wrap}#firebaseSyncBar{pointer-events:none}#firebaseSyncBar button{pointer-events:auto;min-height:36px;padding:5px 9px;font-size:12px}#firebaseSyncStatus{overflow-wrap:anywhere}#firebasePendingRecovery{max-width:420px;margin:20px auto;overflow-wrap:anywhere}.firebase-locked>.app-shell{visibility:hidden}
 </style>
 <style>
